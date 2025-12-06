@@ -1,0 +1,70 @@
+# Directorios
+SRC_DIR := src
+BIN_DIR := bin
+INCLUDE_DIR := include
+ASSETS_DIR := assets
+
+# Compilador y flags
+CXX := g++
+CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR)
+
+# Librerías SFML
+SFML_LIBS := -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
+
+# Obtener todos los archivos .cpp en el directorio de origen
+CPP_FILES := $(wildcard $(SRC_DIR)/*.cpp)
+
+# Generar los nombres de los archivos .exe en el directorio de destino
+EXE_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(BIN_DIR)/%.exe,$(CPP_FILES))
+
+# Regla por defecto
+all: $(EXE_FILES)
+
+# Regla para compilar cada archivo .cpp y generar el archivo .exe correspondiente
+$(BIN_DIR)/%.exe: $(SRC_DIR)/%.cpp
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(SFML_LIBS)
+	@echo "✓ Compilado: $@"
+
+# Regla para ejecutar un archivo específico (ej: make run0 para 0_Ventana.exe)
+run%: $(BIN_DIR)/%.exe
+	@echo "Ejecutando $<..."
+	./$<
+
+# Regla para compilar y ejecutar el mapa (1_mapa.exe)
+runmap: $(BIN_DIR)/1_mapa.exe
+	@echo "Ejecutando 1_mapa.exe..."
+	./$<
+
+# Regla para compilar y ejecutar la ventana (0_Ventana.exe)
+runwindow: $(BIN_DIR)/0_Ventana.exe
+	@echo "Ejecutando 0_Ventana.exe..."
+	./$<
+
+# Regla para limpiar los archivos generados
+clean:
+	@rm -f $(EXE_FILES)
+	@echo "✓ Archivos compilados eliminados"
+
+# Regla para ver los archivos compilables
+list:
+	@echo "Archivos fuente encontrados:"
+	@echo $(CPP_FILES)
+	@echo ""
+	@echo "Ejecutables que se generarán:"
+	@echo $(EXE_FILES)
+
+# Regla para help
+help:
+	@echo "Comandos disponibles:"
+	@echo "  make all          - Compila todos los archivos .cpp"
+	@echo "  make run0         - Compila y ejecuta 0_Ventana.exe"
+	@echo "  make run1         - Compila y ejecuta 1_mapa.exe"
+	@echo "  make runmap       - Compila y ejecuta 1_mapa.exe"
+	@echo "  make runwindow    - Compila y ejecuta 0_Ventana.exe"
+	@echo "  make clean        - Elimina todos los ejecutables"
+	@echo "  make list         - Muestra los archivos fuente y ejecutables"
+	@echo "  make help         - Muestra esta ayuda"
+
+.PHONY: all clean list help
+.PHONY: run% runmap runwindow
