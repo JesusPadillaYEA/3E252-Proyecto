@@ -38,21 +38,19 @@ int main() {
     sf::Texture marTexture;
     if (!marTexture.loadFromFile("assets/images/mar.png")) {
         std::cerr << "Error al cargar la textura del mar desde assets/images/mar.png" << std::endl;
-        // return -1; // Descomenta si quieres que el programa se cierre si no encuentra la imagen
     }
     
-    // Para animar un gif, necesitarías cargar múltiples frames:
-    // Descomenta y ajusta según tus archivos PNG en assets/images/
-    // const int NUM_FRAMES = 10; // Cambia esto según cuántos frames tengas
-    // std::vector<sf::Texture> marFrames;
-    // for (int i = 0; i < NUM_FRAMES; i++) {
-    //     sf::Texture frame;
-    //     std::string framePath = "assets/images/mar_frame_" + std::to_string(i) + ".png";
-    //     if (!frame.loadFromFile(framePath)) {
-    //         std::cerr << "Error al cargar frame: " << framePath << std::endl;
-    //     }
-    //     marFrames.push_back(frame);
-    // }
+    // Configurar la textura para que se repita (tiling)
+    marTexture.setRepeated(true);
+    
+    // Crear sprite para el fondo del mapa
+    sf::Sprite marFondo(marTexture);
+    marFondo.setPosition(0, 0);
+    
+    // Variable para controlar el desplazamiento (efecto de movimiento)
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+    float velocidadMovimiento = 0.5f; // Velocidad del movimiento
     
     // Crear la ventana
     sf::RenderWindow window(sf::VideoMode(MAP_WIDTH * CELL_SIZE, MAP_HEIGHT * CELL_SIZE), "Mapa del Juego");
@@ -86,16 +84,33 @@ int main() {
         // Limpiar la ventana
         window.clear(sf::Color::White);
         
-        // Dibujar el mapa
+        // Actualizar el desplazamiento para el efecto de movimiento
+        offsetX += velocidadMovimiento;
+        offsetY += velocidadMovimiento * 0.5f; // Movimiento vertical más lento
+        
+        // Hacer que el offset sea cíclico (para efecto infinito)
+        if (offsetX > marTexture.getSize().x) offsetX = 0;
+        if (offsetY > marTexture.getSize().y) offsetY = 0;
+        
+        // Dibujar el fondo del mar con movimiento
+        marFondo.setTextureRect(sf::IntRect(
+            static_cast<int>(offsetX),
+            static_cast<int>(offsetY),
+            MAP_WIDTH * CELL_SIZE,
+            MAP_HEIGHT * CELL_SIZE
+        ));
+        window.draw(marFondo);
+        
+        // Dibujar el grid del mapa encima (opcional)
         for (int x = 0; x < MAP_WIDTH; x++) {
             for (int y = 0; y < MAP_HEIGHT; y++) {
-                window.draw(mapa[x][y].shape);
-                
-                // AQUÍ: Aplicar la textura del mar a cada celda
-                // sf::Sprite marSprite(marTexture);
-                // marSprite.setPosition(x * CELL_SIZE, y * CELL_SIZE);
-                // marSprite.setScale(CELL_SIZE / marTexture.getSize().x, CELL_SIZE / marTexture.getSize().y);
-                // window.draw(marSprite);
+                // Solo dibujar el contorno para ver las coordenadas
+                sf::RectangleShape grid(sf::Vector2f(CELL_SIZE, CELL_SIZE));
+                grid.setPosition(x * CELL_SIZE, y * CELL_SIZE);
+                grid.setFillColor(sf::Color::Transparent);
+                grid.setOutlineThickness(0.3f);
+                grid.setOutlineColor(sf::Color(0, 0, 0, 50)); // Negro semi-transparente
+                window.draw(grid);
             }
         }
         
