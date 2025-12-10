@@ -3,7 +3,7 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 
-// Clase padre Barco
+// Clase Padre Barco
 class Barco {
 public:
     Barco(float x, float y, const std::string& tipo);

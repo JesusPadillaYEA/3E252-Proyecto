@@ -41,6 +41,11 @@ runwindow: $(BIN_DIR)/0_Ventana.exe
 	@echo "Ejecutando 0_Ventana.exe..."
 	./$<
 
+# Regla para compilar y ejecutar visualización de unidades (2_visualizacion_unidades.exe)
+rununidades: $(BIN_DIR)/2_visualizacion_unidades.exe
+	@echo "Ejecutando 2_visualizacion_unidades.exe..."
+	./$<
+
 # Regla para limpiar los archivos generados
 clean:
 	@rm -f $(EXE_FILES)
@@ -60,8 +65,10 @@ help:
 	@echo "  make all          - Compila todos los archivos .cpp"
 	@echo "  make run0         - Compila y ejecuta 0_Ventana.exe"
 	@echo "  make run1         - Compila y ejecuta 1_mapa.exe"
+	@echo "  make run2         - Compila y ejecuta 2_visualizacion_unidades.exe"
 	@echo "  make runmap       - Compila y ejecuta 1_mapa.exe"
 	@echo "  make runwindow    - Compila y ejecuta 0_Ventana.exe"
+	@echo "  make rununidades  - Compila y ejecuta 2_visualizacion_unidades.exe"
 	@echo "  make clean        - Elimina todos los ejecutables"
 	@echo "  make list         - Muestra los archivos fuente y ejecutables"
 	@echo "  make help         - Muestra esta ayuda"
