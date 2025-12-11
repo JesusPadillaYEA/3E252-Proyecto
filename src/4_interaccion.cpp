@@ -2,18 +2,19 @@
 #include <iostream>
 #include <vector>
 
+// --- MÓDULOS ---
 #include "EstadoJuego.hpp"
-#include "BarcoEntity.hpp"
 #include "Boton.hpp"
 #include "CollisionManager.hpp"
 #include "MovementManager.hpp"
 #include "UIManager.hpp"
+#include "Jugador.hpp"
+#include "GeneradorFlotas.hpp"
+#include "RenderManager.hpp" // <--- NUEVO INCLUDE
 
 int main() {
-    // Definimos el tamaño en una variable para reusarla
     const sf::Vector2u WINDOW_SIZE(1000, 700);
-    
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Limites (SFML 3.0)");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Sistema de Vida (SFML 3.0)");
     window.setFramerateLimit(60);
 
     // --- CARGAR RECURSOS ---
@@ -21,40 +22,34 @@ int main() {
     if (!font.openFromFile("assets/fonts/Ring.ttf")) return -1;
 
     sf::Texture tDest, tSub, tMar, tPort;
-    if (!tDest.loadFromFile("assets/images/destructor .png")) return -1;
-    if (!tSub.loadFromFile("assets/images/submarino.png")) return -1;
-    if (!tMar.loadFromFile("assets/images/mar.png")) return -1;
-    if (!tPort.loadFromFile("assets/images/portaviones.png")) tPort = tDest;
+    bool assetsOk = true;
+    if (!tDest.loadFromFile("assets/images/destructor .png")) assetsOk = false;
+    if (!tSub.loadFromFile("assets/images/submarino.png")) assetsOk = false;
+    if (!tMar.loadFromFile("assets/images/mar.png")) assetsOk = false;
+    if (!tPort.loadFromFile("assets/images/portaviones.png")) tPort = tDest; 
 
-    // --- FONDO MAPA COMPLETO ---
+    if (!assetsOk) return -1;
+
+    // --- FONDO ---
     tMar.setRepeated(true);
     sf::Sprite fondo(tMar);
     float offset[2] = {0.f, 0.f};
-    
-    // Inicializamos el rectángulo del tamaño exacto de la ventana
     fondo.setTextureRect(sf::IntRect({0, 0}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
 
-    // --- FLOTAS ---
-    std::vector<BarcoEntity> fP1;
-    // En src/4_interaccion.cpp
-    // Reduce las escalas (ejemplo: de 0.3 a 0.15)
-    fP1.emplace_back(tDest, "Destructor P1"); 
-    fP1.back().sprite.setPosition({50.f, 50.f}); 
-    fP1.back().sprite.setScale({0.15f, 0.15f}); // <--- MÁS PEQUEÑO
+    // --- JUGADORES ---
+    Jugador p1(1, {0.f, 0.f});
+    Jugador p2(2, {700.f, 0.f});
 
-    fP1.emplace_back(tPort, "Portaviones P1"); 
-    fP1.back().sprite.setPosition({50.f, 250.f}); // <--- MÁS SEPARADO
-    fP1.back().sprite.setScale({0.25f, 0.25f}); // <--- MÁS PEQUEÑO
+    GeneradorFlotas::inicializarFlota(p1, tDest, tPort, tSub);
+    GeneradorFlotas::inicializarFlota(p2, tDest, tPort, tSub);
 
-    std::vector<BarcoEntity> fP2;
-    fP2.emplace_back(tSub, "Submarino A"); fP2.back().sprite.setPosition({800.f, 50.f}); fP2.back().sprite.setScale({0.4f, 0.4f}); fP2.back().sprite.setColor({200,200,255});
-    fP2.emplace_back(tSub, "Submarino B"); fP2.back().sprite.setPosition({900.f, 300.f}); fP2.back().sprite.setScale({0.4f, 0.4f}); fP2.back().sprite.setColor({200,200,255});
-
-    // --- UI ---
+    // --- UI GLOBALES ---
     Boton btnAtacar(font, "ATACAR", {200, 50, 50});
     Boton btnMover(font, "MOVER", {50, 150, 50});
+    
+    // Actualizamos texto de ayuda para incluir la tecla de prueba
     sf::Text txtAyuda(font);
-    txtAyuda.setString("FLECHAS: Mover | ENTER: Confirmar | ESC: Cancelar");
+    txtAyuda.setString("FLECHAS: Mover | K: Destruir (Debug) | ENTER: Confirmar");
     txtAyuda.setCharacterSize(16); txtAyuda.setOutlineThickness(2.f);
 
     EstadoJuego estado = MENSAJE_P1;
@@ -62,7 +57,9 @@ int main() {
     bool moviendo = false;
 
     while (window.isOpen()) {
-        auto* flotaActiva = (estado == TURNO_P1) ? &fP1 : (estado == TURNO_P2 ? &fP2 : nullptr);
+        std::vector<BarcoEntity>* flotaActiva = nullptr;
+        if (estado == TURNO_P1) flotaActiva = &p1.getFlota();
+        else if (estado == TURNO_P2) flotaActiva = &p2.getFlota();
 
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
@@ -77,6 +74,16 @@ int main() {
                 if (k->code == sf::Keyboard::Key::Escape) {
                     moviendo = false; if (!moviendo) sel = -1; btnMover.resetColor();
                 }
+                
+                // --- DEBUG: TECLA 'K' PARA MATAR BARCO ---
+                if (k->code == sf::Keyboard::Key::K && sel != -1 && flotaActiva) {
+                    std::cout << ">>> DESTRUYENDO BARCO: " << (*flotaActiva)[sel].nombre << std::endl;
+                    (*flotaActiva)[sel].recibirDano(9999); // Daño masivo
+                    sel = -1; // Deseleccionar inmediatamente
+                    moviendo = false;
+                    btnMover.resetColor();
+                }
+                
                 if (k->code == sf::Keyboard::Key::Enter && moviendo) {
                     moviendo = false; sel = -1; btnMover.resetColor();
                     estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
@@ -89,6 +96,8 @@ int main() {
 
                     if (sel != -1) {
                         if (btnAtacar.esClickeado(pos)) {
+                            // Aquí iría la lógica de disparo real en el futuro
+                            std::cout << "Disparo realizado" << std::endl;
                             moviendo = false; sel = -1; btnMover.resetColor();
                             estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                         } 
@@ -105,8 +114,12 @@ int main() {
                     if (!btnAtacar.esClickeado(pos) && !btnMover.esClickeado(pos) && flotaActiva) {
                         bool hit = false;
                         for (size_t i = 0; i < flotaActiva->size(); ++i) {
+                            // --- NUEVO: NO SELECCIONAR BARCOS DESTRUIDOS ---
+                            if ((*flotaActiva)[i].destruido) continue;
+
                             if ((*flotaActiva)[i].sprite.getGlobalBounds().contains(pos)) {
-                                sel = (int)i; moviendo = false; btnMover.resetColor(); hit = true; break;
+                                sel = (int)i; moviendo = false; btnMover.resetColor(); hit = true;
+                                break;
                             }
                         }
                         if (!hit && !moviendo) sel = -1;
@@ -119,21 +132,26 @@ int main() {
         offset[0] += 0.5f; offset[1] += 0.25f;
         if (offset[0] >= (float)WINDOW_SIZE.x) offset[0] = 0; 
         if (offset[1] >= (float)WINDOW_SIZE.y) offset[1] = 0;
-        
-        // El mapa siempre cubre toda la ventana (WINDOW_SIZE.x, WINDOW_SIZE.y)
         fondo.setTextureRect(sf::IntRect({(int)offset[0], (int)offset[1]}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
 
         if (moviendo && sel != -1 && flotaActiva) {
-            // Pasamos WINDOW_SIZE para limites de colision
-            MovementManager::procesarInput(*flotaActiva, sel, WINDOW_SIZE);
+            // Aseguramos que el barco seleccionado siga vivo (por seguridad)
+            if (!(*flotaActiva)[sel].destruido) {
+                MovementManager::procesarInput(*flotaActiva, sel, WINDOW_SIZE);
+            } else {
+                moviendo = false; sel = -1; // Si murió mientras se movía, cancelar
+            }
         }
 
-        if (sel != -1 && flotaActiva) {
+        // Posicionar Botones
+        if (sel != -1 && flotaActiva && !(*flotaActiva)[sel].destruido) {
             auto bounds = (*flotaActiva)[sel].sprite.getGlobalBounds();
             sf::Vector2f p = (*flotaActiva)[sel].sprite.getPosition();
             float yBtn = p.y + bounds.size.y + 10.f;
+            
             btnAtacar.setPosition({p.x, yBtn});
             btnMover.setPosition({p.x + 110.f, yBtn});
+            
             if (moviendo) {
                 float tw = txtAyuda.getLocalBounds().size.x;
                 txtAyuda.setPosition({p.x + (bounds.size.x-tw)/2, yBtn + 50.f});
@@ -149,18 +167,14 @@ int main() {
             UIManager::dibujarTooltipTurno(window, font, estado);
         } 
         else if (flotaActiva) {
-            for (size_t i=0; i<flotaActiva->size(); ++i) {
-                auto& s = (*flotaActiva)[i].sprite;
-                s.setColor((int)i == sel ? sf::Color(255,200,200) : ((estado==TURNO_P2)?sf::Color(200,200,255):sf::Color::White));
-                window.draw(s);
-            }
-            if (sel != -1) {
-                sf::RectangleShape borde((*flotaActiva)[sel].sprite.getGlobalBounds().size);
-                borde.setPosition((*flotaActiva)[sel].sprite.getPosition());
-                borde.setFillColor(sf::Color::Transparent);
-                borde.setOutlineThickness(2.f);
-                borde.setOutlineColor(moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50));
-                window.draw(borde);
+            // --- USAMOS EL NUEVO RENDER MANAGER ---
+            // Él decide qué dibujar (si está vivo) y cómo (si está seleccionado)
+            sf::Color colorBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
+            
+            RenderManager::renderizarFlota(window, *flotaActiva, sel, estado, moviendo, colorBorde);
+
+            // Dibujar botones solo si hay selección válida
+            if (sel != -1 && !(*flotaActiva)[sel].destruido) {
                 btnAtacar.dibujar(window);
                 btnMover.dibujar(window);
                 if (moviendo) window.draw(txtAyuda);
