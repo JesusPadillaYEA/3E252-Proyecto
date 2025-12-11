@@ -3,10 +3,16 @@
 #include <SFML/Graphics.hpp>
 #include "BarcoEntity.hpp"
 
-// Estructura que representa el tablero del jugador (su flota y su base)
+// Estructura para la pista visual
+struct FlechaPista {
+    sf::Vector2f origen;   // Desde dónde disparó el enemigo
+    sf::Vector2f impacto;  // Dónde cayó el disparo
+    int turnosRestantes;   // Vida de la flecha (normalmente 1)
+};
+
 struct Grid {
     std::vector<BarcoEntity> flota;
-    sf::Vector2f posicionBase; // Punto (0,0) relativo de este grid en la pantalla
+    sf::Vector2f posicionBase;
 
     Grid(sf::Vector2f base) : posicionBase(base) {}
 };
@@ -15,18 +21,16 @@ class Jugador {
 public:
     int id;
     Grid grid;
+    // NUEVO: Lista de pistas visuales que este jugador ve
+    std::vector<FlechaPista> pistas;
 
-    // Nuevo constructor que espera ID y Posición Base (Vector2f)
     Jugador(int numeroJugador, sf::Vector2f basePos) 
         : id(numeroJugador), grid(basePos) {
     }
 
-    // Método helper para acceder a la flota fácilmente
     std::vector<BarcoEntity>& getFlota() {
         return grid.flota;
     }
-
-    // Helper constante
     const std::vector<BarcoEntity>& getFlota() const {
         return grid.flota;
     }

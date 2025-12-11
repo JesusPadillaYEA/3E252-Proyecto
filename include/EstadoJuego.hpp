@@ -1,9 +1,11 @@
 #pragma once
 
-// Enum simple para controlar el flujo del juego
 enum EstadoJuego {
-    MENSAJE_P1, // Turno Jugador 1 (Pantalla de aviso)
-    TURNO_P1,   // Turno Jugador 1 (Jugando)
-    MENSAJE_P2, // Turno Jugador 2 (Pantalla de aviso)
-    TURNO_P2    // Turno Jugador 2 (Jugando)
+    MENSAJE_P1, // Pantalla "Turno Jugador 1"
+    TURNO_P1,   // P1 mueve sus barcos
+    ATACANDO_P1,// P1 selecciona dónde disparar
+    
+    MENSAJE_P2, // Pantalla "Turno Jugador 2"
+    TURNO_P2,   // P2 mueve sus barcos
+    ATACANDO_P2 // P2 selecciona dónde disparar
 };
