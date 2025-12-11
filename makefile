@@ -1,6 +1,6 @@
 # --- AGREGA ESTO AL INICIO DEL MAKEFILE ---
 # Ajusta esta ruta a donde tengas tu SFML
-SFML_PATH := ./sfml
+SFML_PATH := sfml
 
 # Directorios
 SRC_DIR := src
