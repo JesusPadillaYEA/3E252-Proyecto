@@ -3,16 +3,23 @@
 #include <vector>
 #include <string>
 
-// Estructura para representar un barco
+// --- ESTADOS DEL JUEGO ---
+enum EstadoJuego {
+    MENSAJE_P1, // Muestra "Turno Jugador 1" (oculta todo)
+    TURNO_P1,   // Jugador 1 ve sus barcos y juega
+    MENSAJE_P2, // Muestra "Turno Jugador 2" (oculta todo)
+    TURNO_P2    // Jugador 2 ve sus barcos y juega
+};
+
+// Estructura de Barco
 struct BarcoEntity {
     sf::Sprite sprite;
     std::string nombre;
-    // Constructor obligatorio para SFML 3 (Sprite no puede estar vacío)
     BarcoEntity(const sf::Texture& texture, std::string name) 
-        : sprite(texture), nombre(name) {
-    }
+        : sprite(texture), nombre(name) {}
 };
 
+// Configuración de botones
 void configurarBoton(sf::RectangleShape& boton, sf::Text& texto, const sf::Font& fuente, 
                     std::string str, sf::Color colorBase) {
     boton.setSize({100.f, 40.f});
@@ -27,227 +34,226 @@ void configurarBoton(sf::RectangleShape& boton, sf::Text& texto, const sf::Font&
 }
 
 int main() {
-    // 1. Crear ventana
-    sf::RenderWindow window(sf::VideoMode({1000, 700}), "Movimiento Táctico - SFML 3.0");
+    sf::RenderWindow window(sf::VideoMode({1000, 700}), "Batalla Naval - Turnos (SFML 3.0)");
     window.setFramerateLimit(60);
 
-    // 2. Cargar Recursos
+    // --- CARGAR RECURSOS ---
     sf::Font font;
-    if (!font.openFromFile("assets/fonts/Ring.ttf")) {
-        std::cerr << "Error cargando fuente Ring.ttf" << std::endl;
-        std::cout << "Presiona ENTER para salir..." << std::endl;
-        std::cin.get(); 
-        return -1;
-    }
+    if (!font.openFromFile("assets/fonts/Ring.ttf")) return -1;
 
     sf::Texture texDestructor, texSubmarino, texMar;
-    bool cargaOk = true;
-    if (!texDestructor.loadFromFile("assets/images/destructor .png")) cargaOk = false;
-    if (!texSubmarino.loadFromFile("assets/images/submarino.png")) cargaOk = false;
-    if (!texMar.loadFromFile("assets/images/mar.png")) cargaOk = false;
-
-    if (!cargaOk) {
-        std::cerr << "Error cargando imagenes." << std::endl;
-        std::cin.get();
-        return -1;
-    }
+    if (!texDestructor.loadFromFile("assets/images/destructor .png")) return -1;
+    if (!texSubmarino.loadFromFile("assets/images/submarino.png")) return -1;
+    if (!texMar.loadFromFile("assets/images/mar.png")) return -1;
 
     // --- FONDO ANIMADO ---
     texMar.setRepeated(true);
     sf::Sprite fondo(texMar);
-    float offsetX = 0.0f;
-    float offsetY = 0.0f;
+    float offsetX = 0.0f, offsetY = 0.0f;
     fondo.setTextureRect(sf::IntRect({0, 0}, {1000, 700}));
 
-    // 3. Crear Flota
-    std::vector<BarcoEntity> flota;
+    // --- CREAR FLOTAS SEPARADAS ---
+    std::vector<BarcoEntity> flotaP1;
+    std::vector<BarcoEntity> flotaP2;
 
-    BarcoEntity b1(texDestructor, "Destructor Alpha");
+    // Flota P1 (Izquierda - Destructores)
+    BarcoEntity b1(texDestructor, "Destructor P1");
     b1.sprite.setScale({0.3f, 0.3f});
-    b1.sprite.setPosition({150.f, 200.f});
-    flota.push_back(b1);
+    b1.sprite.setPosition({100.f, 200.f});
+    flotaP1.push_back(b1);
 
-    BarcoEntity b2(texSubmarino, "Submarino Bravo");
+    // Flota P2 (Derecha - Submarinos)
+    // Usamos setColor para diferenciarlos un poco (ej: un tono más oscuro)
+    BarcoEntity b2(texSubmarino, "Submarino P2");
     b2.sprite.setScale({0.4f, 0.4f});
-    b2.sprite.setPosition({600.f, 400.f});
-    flota.push_back(b2);
+    b2.sprite.setPosition({700.f, 400.f}); 
+    b2.sprite.setColor(sf::Color(200, 200, 255)); 
+    flotaP2.push_back(b2);
 
-    // 4. Configurar Botones (UI)
+    // --- INTERFAZ ---
     sf::RectangleShape btnAtacar, btnMover;
     sf::Text txtAtacar(font), txtMover(font);
+    sf::Color colRojo(200, 50, 50), colVerde(50, 150, 50), colNaranja(255, 140, 0);
 
-    sf::Color colorRojo = sf::Color(200, 50, 50);
-    sf::Color colorVerde = sf::Color(50, 150, 50);
-    sf::Color colorActivo = sf::Color(255, 165, 0); // Naranja para modo activo
+    configurarBoton(btnAtacar, txtAtacar, font, "ATACAR", colRojo);
+    configurarBoton(btnMover, txtMover, font, "MOVER", colVerde);
 
-    configurarBoton(btnAtacar, txtAtacar, font, "ATACAR", colorRojo);
-    configurarBoton(btnMover, txtMover, font, "MOVER", colorVerde);
+    // Texto para los mensajes de turno
+    sf::Text textoMensaje(font);
+    textoMensaje.setCharacterSize(50);
+    textoMensaje.setFillColor(sf::Color::White);
+    textoMensaje.setOutlineColor(sf::Color::Black);
+    textoMensaje.setOutlineThickness(3.f);
+
+    sf::Text subMensaje(font);
+    subMensaje.setCharacterSize(20);
+    subMensaje.setString("(Haz clic para continuar)");
+    subMensaje.setFillColor(sf::Color::Yellow);
 
     // --- VARIABLES DE ESTADO ---
+    EstadoJuego estadoActual = MENSAJE_P1;
     int indiceSeleccionado = -1;
-    bool moviendoBarco = false; // Indica si estamos en modo "mover con flechas"
+    bool moviendoBarco = false;
 
-    // Loop Principal
     while (window.isOpen()) {
+        // Obtenemos referencia a la flota activa para no duplicar código
+        std::vector<BarcoEntity>* flotaActiva = nullptr;
+        if (estadoActual == TURNO_P1) flotaActiva = &flotaP1;
+        if (estadoActual == TURNO_P2) flotaActiva = &flotaP2;
+
         while (const auto event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                window.close();
+            if (event->is<sf::Event::Closed>()) window.close();
+
+            // --- LÓGICA: PANTALLAS DE MENSAJE ---
+            if (estadoActual == MENSAJE_P1 || estadoActual == MENSAJE_P2) {
+                // Cualquier clic o tecla avanza al juego
+                if (event->is<sf::Event::MouseButtonPressed>() || event->is<sf::Event::KeyPressed>()) {
+                    if (estadoActual == MENSAJE_P1) estadoActual = TURNO_P1;
+                    else estadoActual = TURNO_P2;
+                }
+                continue; // Saltamos el resto de lógica si estamos en mensaje
             }
 
-            // Manejo del Teclado (Eventos de una sola vez)
+            // --- LÓGICA: JUEGO ACTIVO (P1 o P2) ---
             if (const auto* keyEvent = event->getIf<sf::Event::KeyPressed>()) {
                 if (keyEvent->code == sf::Keyboard::Key::Escape) {
-                    // ESC cancela movimiento o selección
                     if (moviendoBarco) {
+                        // TERMINAR MOVIMIENTO -> CAMBIO DE TURNO
                         moviendoBarco = false;
-                        std::cout << "Movimiento cancelado." << std::endl;
-                        btnMover.setFillColor(colorVerde); // Restaurar color
+                        indiceSeleccionado = -1;
+                        btnMover.setFillColor(colVerde);
+                        // Cambiar al mensaje del OTRO jugador
+                        estadoActual = (estadoActual == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                     } else {
-                        indiceSeleccionado = -1; // Deseleccionar
+                        indiceSeleccionado = -1;
                     }
                 }
             }
 
-            // Manejo del Mouse
             if (const auto* mouseBtn = event->getIf<sf::Event::MouseButtonPressed>()) {
                 if (mouseBtn->button == sf::Mouse::Button::Left) {
                     sf::Vector2f mousePos = window.mapPixelToCoords(mouseBtn->position);
+                    bool clicInterfaz = false;
 
-                    // 1. Verificar clic en botones (SOLO si hay barco seleccionado)
-                    bool clicEnInterfaz = false;
+                    // 1. Clic en Botones
                     if (indiceSeleccionado != -1) {
                         if (btnAtacar.getGlobalBounds().contains(mousePos)) {
-                            std::cout << ">>> " << flota[indiceSeleccionado].nombre << " disparo sus cañones!" << std::endl;
-                            clicEnInterfaz = true;
-                            // Al atacar, dejamos de mover
-                            moviendoBarco = false;
-                            btnMover.setFillColor(colorVerde);
+                            std::cout << "Pium Pium!" << std::endl;
+                            clicInterfaz = true;
                         } 
                         else if (btnMover.getGlobalBounds().contains(mousePos)) {
-                            // TOGGLE MOVIMIENTO
-                            moviendoBarco = !moviendoBarco;
+                            clicInterfaz = true;
+                            
+                            // Si ya estaba moviendo y hago clic de nuevo -> TERMINO MOVIMIENTO
                             if (moviendoBarco) {
-                                std::cout << ">>> MODO MOVIMIENTO ACTIVADO: Usa las flechas." << std::endl;
-                                btnMover.setFillColor(colorActivo); // Cambiar color a naranja
+                                moviendoBarco = false;
+                                indiceSeleccionado = -1;
+                                btnMover.setFillColor(colVerde);
+                                // CAMBIO DE TURNO
+                                estadoActual = (estadoActual == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                             } else {
-                                std::cout << ">>> Modo movimiento desactivado." << std::endl;
-                                btnMover.setFillColor(colorVerde);
+                                // Iniciar movimiento
+                                moviendoBarco = true;
+                                btnMover.setFillColor(colNaranja);
                             }
-                            clicEnInterfaz = true;
                         }
                     }
 
-                    // 2. Si no toqué botones, verificar selección de barcos
-                    if (!clicEnInterfaz) {
-                        bool clicEnBarco = false;
-                        for (size_t i = 0; i < flota.size(); i++) {
-                            if (flota[i].sprite.getGlobalBounds().contains(mousePos)) {
+                    // 2. Selección de Barcos (Solo de la flota activa)
+                    if (!clicInterfaz && !moviendoBarco) {
+                        bool tocoBarco = false;
+                        for (size_t i = 0; i < flotaActiva->size(); i++) {
+                            if ((*flotaActiva)[i].sprite.getGlobalBounds().contains(mousePos)) {
                                 indiceSeleccionado = (int)i;
-                                clicEnBarco = true;
-                                moviendoBarco = false; // Resetear movimiento al cambiar barco
-                                btnMover.setFillColor(colorVerde);
-                                std::cout << "Seleccionado: " << flota[i].nombre << std::endl;
+                                tocoBarco = true;
                                 break;
                             }
                         }
-                        // Si hice clic en el mar (y no estoy moviendo activamente), deseleccionar
-                        if (!clicEnBarco && !moviendoBarco) {
-                            indiceSeleccionado = -1;
-                        }
+                        if (!tocoBarco) indiceSeleccionado = -1;
                     }
                 }
             }
         }
 
-        // --- LÓGICA DE JUEGO (FRAME A FRAME) ---
+        // --- UPDATE ---
+        // Animar fondo
+        offsetX += 0.5f; offsetY += 0.25f;
+        if (offsetX >= (float)texMar.getSize().x) offsetX = 0;
+        if (offsetY >= (float)texMar.getSize().y) offsetY = 0;
+        fondo.setTextureRect(sf::IntRect({(int)offsetX, (int)offsetY}, {1000, 700}));
 
-        // 1. Mover Barco con Teclado
-        if (indiceSeleccionado != -1 && moviendoBarco) {
-            float velocidad = 3.0f;
-            sf::Vector2f movimiento(0.f, 0.f);
-
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) movimiento.x += velocidad;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  movimiento.x -= velocidad;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    movimiento.y -= velocidad;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))  movimiento.y += velocidad;
-
-            // Mover el sprite
-            flota[indiceSeleccionado].sprite.move(movimiento);
+        // Mover barco con flechas
+        if (moviendoBarco && indiceSeleccionado != -1 && flotaActiva) {
+            sf::Vector2f move(0.f, 0.f);
+            float vel = 3.0f;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) move.x += vel;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  move.x -= vel;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    move.y -= vel;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))  move.y += vel;
+            (*flotaActiva)[indiceSeleccionado].sprite.move(move);
         }
 
-        // 2. Actualizar Posición de los Botones (Deben seguir al barco)
-        if (indiceSeleccionado != -1) {
-            auto bounds = flota[indiceSeleccionado].sprite.getGlobalBounds();
-            sf::Vector2f pos = flota[indiceSeleccionado].sprite.getPosition();
-            
-            // Calculamos posición debajo del barco
+        // Posicionar botones
+        if (indiceSeleccionado != -1 && flotaActiva) {
+            auto bounds = (*flotaActiva)[indiceSeleccionado].sprite.getGlobalBounds();
+            sf::Vector2f pos = (*flotaActiva)[indiceSeleccionado].sprite.getPosition();
             float bx = pos.x;
             float by = pos.y + bounds.size.y + 10.f;
 
-            // Aplicamos posición
             btnAtacar.setPosition({bx, by});
             btnMover.setPosition({bx + 110.f, by});
-
-            // Centrar textos en botones
             txtAtacar.setPosition({bx + 15.f, by + 8.f});
             txtMover.setPosition({bx + 110.f + 20.f, by + 8.f});
         }
-
-        // 3. Animar Fondo
-        offsetX += 0.5f;
-        offsetY += 0.25f;
-        if (offsetX >= (float)texMar.getSize().x) offsetX = 0.0f;
-        if (offsetY >= (float)texMar.getSize().y) offsetY = 0.0f;
-        fondo.setTextureRect(sf::IntRect({(int)offsetX, (int)offsetY}, {1000, 700}));
-
 
         // --- DIBUJAR ---
         window.clear();
         window.draw(fondo);
 
-        // Dibujar barcos
-        for (size_t i = 0; i < flota.size(); i++) {
-            // Efecto visual de selección
-            if ((int)i == indiceSeleccionado) {
-                flota[i].sprite.setColor(sf::Color(255, 200, 200)); // Rojizo
-            } else {
-                flota[i].sprite.setColor(sf::Color::White);
-            }
-            window.draw(flota[i].sprite);
+        // Caso 1: Pantallas de Mensaje
+        if (estadoActual == MENSAJE_P1 || estadoActual == MENSAJE_P2) {
+            // Fondo oscuro semitransparente
+            sf::RectangleShape overlay({1000.f, 700.f});
+            overlay.setFillColor(sf::Color(0, 0, 0, 200));
+            window.draw(overlay);
+
+            std::string msg = (estadoActual == MENSAJE_P1) ? "JUGADOR 1" : "JUGADOR 2";
+            textoMensaje.setString(msg);
+            
+            // Centrar texto
+            auto bounds = textoMensaje.getLocalBounds();
+            textoMensaje.setPosition({(1000.f - bounds.size.x)/2.f, (700.f - bounds.size.y)/2.f - 20.f});
+            
+            auto subBounds = subMensaje.getLocalBounds();
+            subMensaje.setPosition({(1000.f - subBounds.size.x)/2.f, textoMensaje.getPosition().y + 80.f});
+
+            window.draw(textoMensaje);
+            window.draw(subMensaje);
         }
+        // Caso 2: Juego (Dibujar solo flota activa)
+        else if (flotaActiva) {
+            // Dibujar barcos
+            for (size_t i = 0; i < flotaActiva->size(); i++) {
+                if ((int)i == indiceSeleccionado) (*flotaActiva)[i].sprite.setColor(sf::Color(255, 200, 200));
+                else (*flotaActiva)[i].sprite.setColor(sf::Color::White);
+                window.draw((*flotaActiva)[i].sprite);
+            }
 
-        // Dibujar UI (Solo si hay selección)
-        if (indiceSeleccionado != -1) {
-            // Marco verde alrededor del barco
-            sf::RectangleShape marco;
-            auto bounds = flota[indiceSeleccionado].sprite.getGlobalBounds();
-            marco.setSize(bounds.size);
-            marco.setPosition(flota[indiceSeleccionado].sprite.getPosition());
-            marco.setFillColor(sf::Color::Transparent);
-            
-            // Si está moviéndose, marco naranja, si no, verde
-            if (moviendoBarco) marco.setOutlineColor(colorActivo);
-            else marco.setOutlineColor(sf::Color::Green);
-            
-            marco.setOutlineThickness(2.f);
-            window.draw(marco);
+            // Dibujar UI si hay selección
+            if (indiceSeleccionado != -1) {
+                sf::RectangleShape marco;
+                auto bounds = (*flotaActiva)[indiceSeleccionado].sprite.getGlobalBounds();
+                marco.setSize(bounds.size);
+                marco.setPosition((*flotaActiva)[indiceSeleccionado].sprite.getPosition());
+                marco.setFillColor(sf::Color::Transparent);
+                marco.setOutlineColor(moviendoBarco ? colNaranja : colVerde);
+                marco.setOutlineThickness(2.f);
+                window.draw(marco);
 
-            // Botones
-            window.draw(btnAtacar);
-            window.draw(txtAtacar);
-            window.draw(btnMover);
-            window.draw(txtMover);
-
-            // Texto de ayuda si se está moviendo
-            if (moviendoBarco) {
-                sf::Text ayuda(font);
-                ayuda.setString("Usa las FLECHAS para mover\nPresiona ESC para terminar");
-                ayuda.setCharacterSize(14);
-                ayuda.setFillColor(sf::Color::White);
-                ayuda.setOutlineColor(sf::Color::Black);
-                ayuda.setOutlineThickness(1.f);
-                ayuda.setPosition({btnMover.getPosition().x, btnMover.getPosition().y + 45.f});
-                window.draw(ayuda);
+                window.draw(btnAtacar);
+                window.draw(txtAtacar);
+                window.draw(btnMover);
+                window.draw(txtMover);
             }
         }
 
