@@ -46,6 +46,21 @@ rununidades: $(BIN_DIR)/2_visualizacion_unidades.exe
 	@echo "Ejecutando 2_visualizacion_unidades.exe..."
 	./$<
 
+# Regla explícita para run2
+run2: $(BIN_DIR)/2_visualizacion_unidades.exe
+	@echo "Ejecutando 2_visualizacion_unidades.exe..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/2_visualizacion_unidades.exe
+
+# Regla explícita para run3 - Launcher
+run3: $(BIN_DIR)/3_launcher.exe
+	@echo "Ejecutando 3_launcher.exe..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/3_launcher.exe
+
+# Regla para ejecutar el launcher
+launcher: $(BIN_DIR)/3_launcher.exe
+	@echo "Ejecutando Launcher..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/3_launcher.exe
+
 # Regla para limpiar los archivos generados
 clean:
 	@rm -f $(EXE_FILES)

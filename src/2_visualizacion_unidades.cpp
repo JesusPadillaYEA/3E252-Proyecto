@@ -72,38 +72,38 @@ int main() {
     // DESTRUCTORES (2x3)
     Unidad destructor1;
     destructor1.nombre = "Destructor 1";
-    destructor1.x = 150;
-    destructor1.y = 150;
+    destructor1.x = 100;
+    destructor1.y = 100;
     destructor1.sprite.setTexture(textDestructor);
     destructor1.sprite.setPosition(destructor1.x, destructor1.y);
-    destructor1.sprite.setScale(0.3f, 0.45f); // 2x3 celdas
+    destructor1.sprite.setScale(0.3f, 0.3f); // 2x3 celdas
     unidades.push_back(destructor1);
     
     // SUBMARINOS (2x3)
     Unidad submarino1;
     submarino1.nombre = "Submarino 1";
-    submarino1.x = 600;
-    submarino1.y = 300;
+    submarino1.x = 200;
+    submarino1.y = 200;
     submarino1.sprite.setTexture(textSubmarino);
     submarino1.sprite.setPosition(submarino1.x, submarino1.y);
-    submarino1.sprite.setScale(0.3f, 0.45f); // 2x3 celdas
+    submarino1.sprite.setScale(0.45f, 0.45f); // 2x3 celdas
     unidades.push_back(submarino1);
     
     // PORTAVIONES (3x5)
     Unidad portaviones1;
     portaviones1.nombre = "Portaviones 1";
     portaviones1.x = 300;
-    portaviones1.y = 450;
+    portaviones1.y = 300;
     portaviones1.sprite.setTexture(textPortaviones);
     portaviones1.sprite.setPosition(portaviones1.x, portaviones1.y);
-    portaviones1.sprite.setScale(0.45f, 0.75f); // 3x5 celdas
+    portaviones1.sprite.setScale(0.9f, 0.7f); // 3x5 celdas
     unidades.push_back(portaviones1);
     
     // AVIONES (2x2)
     Unidad avion1;
     avion1.nombre = "Avion 1";
-    avion1.x = 200;
-    avion1.y = 50;
+    avion1.x = 400;
+    avion1.y = 400;
     avion1.sprite.setTexture(textAvion1);
     avion1.sprite.setPosition(avion1.x, avion1.y);
     avion1.sprite.setScale(0.2f, 0.2f); // 2x2 celdas
@@ -111,21 +111,21 @@ int main() {
     
     Unidad avion2;
     avion2.nombre = "Avion 2";
-    avion2.x = 450;
-    avion2.y = 100;
+    avion2.x = 500;
+    avion2.y = 500;
     avion2.sprite.setTexture(textAvion2);
     avion2.sprite.setPosition(avion2.x, avion2.y);
-    avion2.sprite.setScale(0.2f, 0.2f); // 2x2 celdas
+    avion2.sprite.setScale(0.17f, 0.17f); // 2x2 celdas
     unidades.push_back(avion2);
     
     // UAV (1x1)
     Unidad uav1;
     uav1.nombre = "UAV 1";
-    uav1.x = 700;
-    uav1.y = 100;
+    uav1.x = 600;
+    uav1.y = 600;
     uav1.sprite.setTexture(textUAV);
     uav1.sprite.setPosition(uav1.x, uav1.y);
-    uav1.sprite.setScale(0.1f, 0.1f); // 1x1 celdas
+    uav1.sprite.setScale(0.15f, 0.15f); // 1x1 celdas
     unidades.push_back(uav1);
     
     // Variables para la selección
@@ -183,12 +183,12 @@ int main() {
             
             // Dibujar un círculo rojo alrededor de la unidad seleccionada
             if (i == unidadSeleccionada) {
-                sf::CircleShape seleccion(50.0f);
+                sf::RectangleShape seleccion(sf::Vector2f(60.0f, 50.0f));
                 seleccion.setFillColor(sf::Color::Transparent);
                 seleccion.setOutlineThickness(2.0f);
                 seleccion.setOutlineColor(sf::Color::Red);
-                seleccion.setPosition(unidades[i].sprite.getPosition().x - 50, 
-                                    unidades[i].sprite.getPosition().y - 50);
+                seleccion.setPosition(unidades[i].sprite.getPosition().x, 
+                                    unidades[i].sprite.getPosition().y);
                 window.draw(seleccion);
             }
         }
