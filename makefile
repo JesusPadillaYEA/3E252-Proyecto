@@ -41,6 +41,26 @@ runwindow: $(BIN_DIR)/0_Ventana.exe
 	@echo "Ejecutando 0_Ventana.exe..."
 	./$<
 
+# Regla para compilar y ejecutar visualización de unidades (2_visualizacion_unidades.exe)
+rununidades: $(BIN_DIR)/2_visualizacion_unidades.exe
+	@echo "Ejecutando 2_visualizacion_unidades.exe..."
+	./$<
+
+# Regla explícita para run2
+run2: $(BIN_DIR)/2_visualizacion_unidades.exe
+	@echo "Ejecutando 2_visualizacion_unidades.exe..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/2_visualizacion_unidades.exe
+
+# Regla explícita para run3 - Launcher
+run3: $(BIN_DIR)/3_launcher.exe
+	@echo "Ejecutando 3_launcher.exe..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/3_launcher.exe
+
+# Regla para ejecutar el launcher
+launcher: $(BIN_DIR)/3_launcher.exe
+	@echo "Ejecutando Launcher..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/3_launcher.exe
+
 # Regla para limpiar los archivos generados
 clean:
 	@rm -f $(EXE_FILES)
@@ -60,8 +80,10 @@ help:
 	@echo "  make all          - Compila todos los archivos .cpp"
 	@echo "  make run0         - Compila y ejecuta 0_Ventana.exe"
 	@echo "  make run1         - Compila y ejecuta 1_mapa.exe"
+	@echo "  make run2         - Compila y ejecuta 2_visualizacion_unidades.exe"
 	@echo "  make runmap       - Compila y ejecuta 1_mapa.exe"
 	@echo "  make runwindow    - Compila y ejecuta 0_Ventana.exe"
+	@echo "  make rununidades  - Compila y ejecuta 2_visualizacion_unidades.exe"
 	@echo "  make clean        - Elimina todos los ejecutables"
 	@echo "  make list         - Muestra los archivos fuente y ejecutables"
 	@echo "  make help         - Muestra esta ayuda"
