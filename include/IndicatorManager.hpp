@@ -2,23 +2,18 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <cmath>
-#include <algorithm> // <--- ESTO FALTABA (necesario para std::remove_if)
+#include <algorithm>
 #include "Jugador.hpp"
 
 namespace IndicatorManager {
 
-    // Registra una nueva pista en la víctima
     inline void agregarPista(Jugador& victima, sf::Vector2f origenDisparo, sf::Vector2f puntoImpacto) {
-        // La pista dura 1 turno completo (el turno de la víctima)
         FlechaPista nueva = {origenDisparo, puntoImpacto, 1};
         victima.pistas.push_back(nueva);
     }
 
-    // Reduce la vida de las flechas y borra las viejas
     inline void actualizarTurnos(Jugador& jugadorActual) {
         auto& lista = jugadorActual.pistas;
-        
-        // Eliminar flechas que ya cumplieron su ciclo
         lista.erase(std::remove_if(lista.begin(), lista.end(),
             [](FlechaPista& f) {
                 f.turnosRestantes--; 
@@ -26,31 +21,60 @@ namespace IndicatorManager {
             }), lista.end());
     }
 
-    // Dibuja las flechas activas
+    // Renderiza la flecha indicadora
     inline void renderizarPistas(sf::RenderWindow& window, const Jugador& jugadorActual) {
+        if (jugadorActual.pistas.empty()) return;
+
+        sf::Vector2f winSize(static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y));
+        
+        // 1. PUNTO DE ANCLAJE: Siempre arriba al centro (Tu "Norte")
+        sf::Vector2f centroSuperior = {winSize.x / 2.f, 60.f};
+
         for (const auto& flecha : jugadorActual.pistas) {
             
-            // Matemáticas para dibujar una flecha rotada
-            sf::Vector2f diff = flecha.impacto - flecha.origen;
-            float longitud = std::sqrt(diff.x*diff.x + diff.y*diff.y);
-            float angulo = std::atan2(diff.y, diff.x) * 180.f / 3.14159f;
+            // 2. CÁLCULO DEL VECTOR UNITARIO INVERTIDO
+            // El disparo vino de 'flecha.origen' (coords del enemigo).
+            // Para ti, ese punto está rotado 180 grados.
+            // Origen Aparente = (W - OrigenReal.x, H - OrigenReal.y)
+            
+            sf::Vector2f origenAparente;
+            origenAparente.x = winSize.x - flecha.origen.x;
+            origenAparente.y = winSize.y - flecha.origen.y;
 
-            // 1. Cuerpo de la flecha (Línea)
-            sf::RectangleShape linea({longitud, 3.f});
-            linea.setOrigin({0.f, 1.5f});
-            linea.setPosition(flecha.origen);
-            linea.setRotation(sf::degrees(angulo)); 
-            linea.setFillColor(sf::Color::Red);
+            // Vector dirección: Desde tu radar (arriba) hacia donde vino el tiro (aparente)
+            sf::Vector2f direccion = origenAparente - centroSuperior;
 
-            // 2. Cabeza de la flecha (Triángulo)
-            sf::CircleShape cabeza(8.f, 3);
-            cabeza.setOrigin({8.f, 8.f});
-            cabeza.setPosition(flecha.impacto);
-            cabeza.setRotation(sf::degrees(angulo + 90.f));
-            cabeza.setFillColor(sf::Color::Red);
+            // Ángulo
+            float angulo = std::atan2(direccion.y, direccion.x) * 180.f / 3.14159f;
 
-            window.draw(linea);
+            // 3. DIBUJAR FLECHA
+            float largoFlecha = 60.f;
+
+            sf::RectangleShape cuerpo({largoFlecha, 4.f});
+            cuerpo.setOrigin({0.f, 2.f});
+            cuerpo.setPosition(centroSuperior);
+            cuerpo.setRotation(sf::degrees(angulo));
+            cuerpo.setFillColor(sf::Color(255, 50, 50)); // Rojo Alerta
+
+            sf::CircleShape cabeza(10.f, 3);
+            cabeza.setOrigin({10.f, 10.f});
+            
+            float rad = angulo * 3.14159f / 180.f;
+            sf::Vector2f puntaPos = centroSuperior + sf::Vector2f(std::cos(rad) * largoFlecha, std::sin(rad) * largoFlecha);
+            
+            cabeza.setPosition(puntaPos);
+            cabeza.setRotation(sf::degrees(angulo + 90.f)); 
+            cabeza.setFillColor(sf::Color(255, 50, 50));
+
+            // Pivote Visual
+            sf::CircleShape pivote(5.f);
+            pivote.setOrigin({5.f, 5.f});
+            pivote.setPosition(centroSuperior);
+            pivote.setFillColor(sf::Color::White);
+
+            window.draw(cuerpo);
             window.draw(cabeza);
+            window.draw(pivote);
         }
     }
 }

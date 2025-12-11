@@ -2,7 +2,6 @@
 #include <iostream>
 #include <vector>
 
-// --- MÓDULOS ---
 #include "EstadoJuego.hpp"
 #include "Boton.hpp"
 #include "CollisionManager.hpp"
@@ -16,7 +15,7 @@
 
 int main() {
     const sf::Vector2u WINDOW_SIZE(1000, 700);
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Radar Final (SFML 3.0)");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Espejo (SFML 3.0)");
     window.setFramerateLimit(60);
 
     // --- RECURSOS ---
@@ -31,20 +30,17 @@ int main() {
     if (!tPort.loadFromFile("assets/images/portaviones.png")) tPort = tDest; 
     if (!assetsOk) return -1;
 
-    // --- FONDO ---
     tMar.setRepeated(true);
     sf::Sprite fondo(tMar);
     float offset[2] = {0.f, 0.f};
     fondo.setTextureRect(sf::IntRect({0, 0}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
 
-    // --- JUGADORES ---
     Jugador p1(1, {0.f, 0.f});
     Jugador p2(2, {700.f, 0.f});
 
     GeneradorFlotas::inicializarFlota(p1, tDest, tPort, tSub);
     GeneradorFlotas::inicializarFlota(p2, tDest, tPort, tSub);
 
-    // --- UI ---
     Boton btnAtacar(font, "ATACAR", {200, 50, 50});
     Boton btnMover(font, "MOVER", {50, 150, 50});
     
@@ -52,15 +48,14 @@ int main() {
     txtInfo.setCharacterSize(20);
     txtInfo.setOutlineThickness(2.f);
     txtInfo.setFillColor(sf::Color::Yellow);
-    txtInfo.setString("MODO ATAQUE: Haz CLICK en el area enemiga");
-    txtInfo.setPosition({250.f, 50.f});
+    txtInfo.setString("MODO ATAQUE: Radar Activo (Inferior)");
+    txtInfo.setPosition({300.f, 50.f});
 
     EstadoJuego estado = MENSAJE_P1;
     int sel = -1;
     bool moviendo = false;
 
     while (window.isOpen()) {
-        // Punteros para acceso rápido
         Jugador* jugadorActual = nullptr;
         Jugador* jugadorEnemigo = nullptr;
 
@@ -75,19 +70,19 @@ int main() {
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
 
-            // 1. PANTALLAS DE MENSAJE
             if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) 
                     estado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
                 continue;
             }
 
-            // 2. MODO ATAQUE
+            // MODO ATAQUE
             if (estado == ATACANDO_P1 || estado == ATACANDO_P2) {
                 if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                     if (m->button == sf::Mouse::Button::Left) {
                         sf::Vector2f targetPos = window.mapPixelToCoords(m->position);
-                        
+
+                        // Calculamos origen del disparo (desde tu barco seleccionado)
                         sf::Vector2f origenPos = {0,0};
                         if (sel != -1 && jugadorActual) {
                             auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
@@ -97,13 +92,13 @@ int main() {
                             };
                         }
 
+                        // PROCESAR DISPARO CON LÓGICA ESPEJO
                         if (jugadorEnemigo) {
-                            AttackManager::procesarDisparo(targetPos, origenPos, *jugadorEnemigo);
+                            // PASAMOS WINDOW_SIZE AHORA
+                            AttackManager::procesarDisparo(targetPos, origenPos, *jugadorEnemigo, WINDOW_SIZE);
                         }
 
-                        // Limpiar pistas VIEJAS
                         IndicatorManager::actualizarTurnos(*jugadorActual);
-                        
                         estado = (estado == ATACANDO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                         sel = -1; moviendo = false; btnMover.resetColor();
                     }
@@ -116,7 +111,7 @@ int main() {
                 continue;
             }
 
-            // 3. MODO NORMAL
+            // MODO NORMAL
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
                     moviendo = false; sel = -1; btnMover.resetColor();
@@ -134,6 +129,8 @@ int main() {
 
                     if (sel != -1) {
                         if (btnAtacar.esClickeado(pos)) {
+                            // Entramos en modo ataque, PERO mantenemos el barco seleccionado
+                            // para saber quién dispara
                             moviendo = false; btnMover.resetColor();
                             estado = (estado == TURNO_P1) ? ATACANDO_P1 : ATACANDO_P2;
                         } 
@@ -171,23 +168,17 @@ int main() {
 
         if (moviendo && sel != -1 && jugadorActual) {
             auto& barco = jugadorActual->getFlota()[sel];
-            if (!barco.destruido) {
-                // CORRECCIÓN AQUÍ: Pasamos la flota completa, no el barco
-                MovementManager::procesarInput(jugadorActual->getFlota(), sel, WINDOW_SIZE);
-            } else { 
-                moviendo = false; sel = -1; 
-            }
+            if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), sel, WINDOW_SIZE);
+            else { moviendo = false; sel = -1; }
         }
 
-        if (sel != -1 && jugadorActual) {
+        if (sel != -1 && jugadorActual && !jugadorActual->getFlota()[sel].destruido) {
              auto& barco = jugadorActual->getFlota()[sel];
-             if (!barco.destruido) {
-                auto bounds = barco.sprite.getGlobalBounds();
-                sf::Vector2f p = barco.sprite.getPosition();
-                float yBtn = p.y + bounds.size.y + 10.f;
-                btnAtacar.setPosition({p.x, yBtn});
-                btnMover.setPosition({p.x + 110.f, yBtn});
-             }
+             auto bounds = barco.sprite.getGlobalBounds();
+             sf::Vector2f p = barco.sprite.getPosition();
+             float yBtn = p.y + bounds.size.y + 10.f;
+             btnAtacar.setPosition({p.x, yBtn});
+             btnMover.setPosition({p.x + 110.f, yBtn});
         }
 
         // --- DRAW ---
@@ -196,19 +187,18 @@ int main() {
 
         if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
             UIManager::dibujarTooltipTurno(window, font, estado);
-        }
-        else if (estado == ATACANDO_P1 || estado == ATACANDO_P2) {
+        }else if (estado == ATACANDO_P1 || estado == ATACANDO_P2) {
             sf::RectangleShape mira({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
             mira.setFillColor(sf::Color(255, 0, 0, 30));
             window.draw(mira);
             window.draw(txtInfo);
-            
-            if (jugadorActual) IndicatorManager::renderizarPistas(window, *jugadorActual);
-        }
-        else if (jugadorActual) {
+        }else if (jugadorActual) {
+            // MODO NORMAL: Flota Propia
             sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
             RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
 
+            // DIBUJAR INDICADOR ARRIBA (esAtaque = false)
+            // Aquí ves las amenazas enemigas
             IndicatorManager::renderizarPistas(window, *jugadorActual);
 
             if (sel != -1 && !jugadorActual->getFlota()[sel].destruido) {
