@@ -1,3 +1,23 @@
+# --- AGREGA ESTO AL INICIO DEL MAKEFILE ---
+# Ajusta esta ruta a donde tengas tu SFML
+SFML_PATH := sfml
+
+# Directorios
+SRC_DIR := src
+BIN_DIR := bin
+INCLUDE_DIR := include
+
+# Compilador y flags
+CXX := g++
+# AQUI AGREGAMOS EL INCLUDE DE SFML (-I)
+CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR) -I$(SFML_PATH)/include
+
+# Librerías SFML
+# AQUI AGREGAMOS LA RUTA DE LIBRERIAS (-L)
+SFML_LIBS := -L$(SFML_PATH)/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
+
+# ... el resto del makefile sigue igual ...
+
 # Directorios
 SRC_DIR := src
 BIN_DIR := bin
@@ -55,6 +75,11 @@ run2: $(BIN_DIR)/2_visualizacion_unidades.exe
 run3: $(BIN_DIR)/3_launcher.exe
 	@echo "Ejecutando 3_launcher.exe..."
 	cd "$(CURDIR)" && ./$(BIN_DIR)/3_launcher.exe
+
+# Regla para compilar y ejecutar la interacción (4_interaccion.exe)
+run4: $(BIN_DIR)/4_interaccion.exe
+	@echo "Ejecutando demostración de interacción..."
+	cd "$(CURDIR)" && ./$(BIN_DIR)/4_interaccion.exe
 
 # Regla para ejecutar el launcher
 launcher: $(BIN_DIR)/3_launcher.exe
