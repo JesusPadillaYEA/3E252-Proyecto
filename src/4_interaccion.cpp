@@ -15,7 +15,7 @@
 
 int main() {
     const sf::Vector2u WINDOW_SIZE(1000, 700);
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Espejo (SFML 3.0)");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Vectorial (SFML 3.0)");
     window.setFramerateLimit(60);
 
     // --- RECURSOS ---
@@ -48,8 +48,8 @@ int main() {
     txtInfo.setCharacterSize(20);
     txtInfo.setOutlineThickness(2.f);
     txtInfo.setFillColor(sf::Color::Yellow);
-    txtInfo.setString("MODO ATAQUE: Radar Activo (Inferior)");
-    txtInfo.setPosition({300.f, 50.f});
+    txtInfo.setString("MODO ATAQUE: Sigue la flecha naranja para devolver el fuego");
+    txtInfo.setPosition({250.f, 50.f});
 
     EstadoJuego estado = MENSAJE_P1;
     int sel = -1;
@@ -81,9 +81,8 @@ int main() {
                 if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                     if (m->button == sf::Mouse::Button::Left) {
                         sf::Vector2f targetPos = window.mapPixelToCoords(m->position);
-
-                        // Calculamos origen del disparo (desde tu barco seleccionado)
                         sf::Vector2f origenPos = {0,0};
+                        
                         if (sel != -1 && jugadorActual) {
                             auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
                             origenPos = {
@@ -92,9 +91,7 @@ int main() {
                             };
                         }
 
-                        // PROCESAR DISPARO CON LÓGICA ESPEJO
                         if (jugadorEnemigo) {
-                            // PASAMOS WINDOW_SIZE AHORA
                             AttackManager::procesarDisparo(targetPos, origenPos, *jugadorEnemigo, WINDOW_SIZE);
                         }
 
@@ -129,8 +126,6 @@ int main() {
 
                     if (sel != -1) {
                         if (btnAtacar.esClickeado(pos)) {
-                            // Entramos en modo ataque, PERO mantenemos el barco seleccionado
-                            // para saber quién dispara
                             moviendo = false; btnMover.resetColor();
                             estado = (estado == TURNO_P1) ? ATACANDO_P1 : ATACANDO_P2;
                         } 
@@ -187,19 +182,23 @@ int main() {
 
         if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
             UIManager::dibujarTooltipTurno(window, font, estado);
-        }else if (estado == ATACANDO_P1 || estado == ATACANDO_P2) {
+        }
+        else if (estado == ATACANDO_P1 || estado == ATACANDO_P2) {
             sf::RectangleShape mira({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
             mira.setFillColor(sf::Color(255, 0, 0, 30));
             window.draw(mira);
             window.draw(txtInfo);
-        }else if (jugadorActual) {
-            // MODO NORMAL: Flota Propia
+
+            // MODO ATAQUE: Dibujar flecha naranja desde abajo
+            // Esta flecha apunta exactamente a donde está el enemigo
+            if (jugadorActual) IndicatorManager::renderizarPistas(window, *jugadorActual, true);
+        }
+        else if (jugadorActual) {
             sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
             RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
 
-            // DIBUJAR INDICADOR ARRIBA (esAtaque = false)
-            // Aquí ves las amenazas enemigas
-            IndicatorManager::renderizarPistas(window, *jugadorActual);
+            // MODO DEFENSA: Dibujar flecha roja desde arriba
+            IndicatorManager::renderizarPistas(window, *jugadorActual, false);
 
             if (sel != -1 && !jugadorActual->getFlota()[sel].destruido) {
                 btnAtacar.dibujar(window);

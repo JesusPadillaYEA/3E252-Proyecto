@@ -21,60 +21,77 @@ namespace IndicatorManager {
             }), lista.end());
     }
 
-    // Renderiza la flecha indicadora
-    inline void renderizarPistas(sf::RenderWindow& window, const Jugador& jugadorActual) {
+    inline void renderizarPistas(sf::RenderWindow& window, const Jugador& jugadorActual, bool esAtaque) {
         if (jugadorActual.pistas.empty()) return;
 
         sf::Vector2f winSize(static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y));
         
-        // 1. PUNTO DE ANCLAJE: Siempre arriba al centro (Tu "Norte")
-        sf::Vector2f centroSuperior = {winSize.x / 2.f, 60.f};
+        // 1. DEFINIR PUNTO DE ORIGEN DEL VECTOR (El Radar)
+        sf::Vector2f centroRadar;
+        if (esAtaque) {
+            // Modo Ataque: Desde abajo (Asistencia de apuntado)
+            centroRadar = {winSize.x / 2.f, winSize.y - 50.f};
+        } else {
+            // Modo Defensa: Desde arriba (Alerta de impacto)
+            centroRadar = {winSize.x / 2.f, 50.f};
+        }
 
         for (const auto& flecha : jugadorActual.pistas) {
             
-            // 2. CÁLCULO DEL VECTOR UNITARIO INVERTIDO
-            // El disparo vino de 'flecha.origen' (coords del enemigo).
-            // Para ti, ese punto está rotado 180 grados.
-            // Origen Aparente = (W - OrigenReal.x, H - OrigenReal.y)
-            
-            sf::Vector2f origenAparente;
-            origenAparente.x = winSize.x - flecha.origen.x;
-            origenAparente.y = winSize.y - flecha.origen.y;
+            // 2. CALCULAR POSICIÓN REAL DEL ENEMIGO EN TU PANTALLA (ESPEJO)
+            // Si el enemigo disparó desde (100, 100), para ti eso es (900, 600)
+            sf::Vector2f posEnemigoVisual;
+            posEnemigoVisual.x = winSize.x - flecha.origen.x;
+            posEnemigoVisual.y = winSize.y - flecha.origen.y;
 
-            // Vector dirección: Desde tu radar (arriba) hacia donde vino el tiro (aparente)
-            sf::Vector2f direccion = origenAparente - centroSuperior;
+            // 3. CALCULAR EL VECTOR (Dirección)
+            // Vector = Destino - Origen
+            sf::Vector2f vectorDireccion = posEnemigoVisual - centroRadar;
 
-            // Ángulo
-            float angulo = std::atan2(direccion.y, direccion.x) * 180.f / 3.14159f;
+            // 4. CALCULAR ÁNGULO
+            float angulo = std::atan2(vectorDireccion.y, vectorDireccion.x) * 180.f / 3.14159f;
 
-            // 3. DIBUJAR FLECHA
-            float largoFlecha = 60.f;
+            // --- DIBUJADO ---
+            float largoFlecha = 80.f; // Un poco más larga para que se note la dirección
+            sf::Color color = esAtaque ? sf::Color(255, 165, 0) : sf::Color(255, 50, 50);
 
+            // Cuerpo
             sf::RectangleShape cuerpo({largoFlecha, 4.f});
             cuerpo.setOrigin({0.f, 2.f});
-            cuerpo.setPosition(centroSuperior);
+            cuerpo.setPosition(centroRadar);
             cuerpo.setRotation(sf::degrees(angulo));
-            cuerpo.setFillColor(sf::Color(255, 50, 50)); // Rojo Alerta
+            cuerpo.setFillColor(color);
 
+            // Cabeza
             sf::CircleShape cabeza(10.f, 3);
             cabeza.setOrigin({10.f, 10.f});
             
+            // Posición de la punta
             float rad = angulo * 3.14159f / 180.f;
-            sf::Vector2f puntaPos = centroSuperior + sf::Vector2f(std::cos(rad) * largoFlecha, std::sin(rad) * largoFlecha);
+            sf::Vector2f puntaPos = centroRadar + sf::Vector2f(std::cos(rad) * largoFlecha, std::sin(rad) * largoFlecha);
             
             cabeza.setPosition(puntaPos);
             cabeza.setRotation(sf::degrees(angulo + 90.f)); 
-            cabeza.setFillColor(sf::Color(255, 50, 50));
+            cabeza.setFillColor(color);
 
-            // Pivote Visual
+            // Pivote (Centro del radar)
             sf::CircleShape pivote(5.f);
             pivote.setOrigin({5.f, 5.f});
-            pivote.setPosition(centroSuperior);
+            pivote.setPosition(centroRadar);
             pivote.setFillColor(sf::Color::White);
 
             window.draw(cuerpo);
             window.draw(cabeza);
             window.draw(pivote);
+
+            // (Opcional) Si es ataque, dibujamos una "mira fantasma" donde deberías disparar
+            if (esAtaque) {
+                sf::CircleShape miraFantasma(5.f);
+                miraFantasma.setOrigin({5.f, 5.f});
+                miraFantasma.setPosition(posEnemigoVisual);
+                miraFantasma.setFillColor(sf::Color(255, 255, 255, 100)); // Semi-transparente
+                window.draw(miraFantasma);
+            }
         }
     }
 }
