@@ -22,15 +22,18 @@ public:
     Grid grid;
     std::vector<FlechaPista> pistas;
 
-    // --- NUEVAS REGLAS DE RADAR ---
-    bool radarUsadoEnTurno;      // Limite: 1 vez por turno
-    bool radarRefuerzoPendiente; // Si no hay portaviones, se activa al inicio del sig. turno
+    // --- REGLAS DE RADAR ---
+    int cooldownRadar;           // Contador de turnos para volver a usar (0 = listo)
+    bool radarRefuerzoPendiente; // Si true, el UAV llega al inicio del siguiente turno
+
+    // Memoria de Inteligencia (Notas)
+    std::vector<sf::Vector2f> memoriaRadar;
 
     Jugador(int numeroJugador, sf::Vector2f basePos) 
         : id(numeroJugador), grid(basePos) {
         
         // Inicializar estados
-        radarUsadoEnTurno = false;
+        cooldownRadar = 0; // Listo para usar al inicio
         radarRefuerzoPendiente = false;
     }
 
