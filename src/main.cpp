@@ -73,57 +73,107 @@ int main() {
         musicaFondo.setVolume(50.f);  // Volumen inicial al 50%
         musicaFondo.play();
     }
-
-    // --- MENU DE PAUSA / VOLUMEN ---
+    
+    // --- CONFIGURACIÓN DE AUDIO Y MENU ---
     bool juegoPausado = false;
-    float volumenActual = 50.f;
+    int opcionMenuSeleccionada = 0; // 0 = Musica, 1 = Efectos
+    float volMusica = 50.f;
+    float volEfectos = 50.f; // Preparado para futuros sonidos
 
-    // Fondo semitransparente oscuro
+    // Aplicar volumen inicial
+    musicaFondo.setVolume(volMusica);
+
+    // >>> NUEVO: CARGAR SONIDO RADAR (CORREGIDO PARA SFML 3) <<<
+    sf::SoundBuffer bufferRadar;
+    
+    // 1. Intentamos cargar el archivo primero
+    if (!bufferRadar.loadFromFile("assets/sounds/radar.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/sounds/radar.ogg" << std::endl;
+    } 
+    
+    // 2. Declaramos el Sound pasando el buffer como argumento (Obligatorio en SFML 3)
+    sf::Sound sRadar(bufferRadar);
+    
+    // 3. Configuramos sus propiedades
+    sRadar.setLooping(true); 
+    sRadar.setVolume(volEfectos);
+    // >>> FIN NUEVO <<<
+
+    // Aplicar volumen inicial
+    musicaFondo.setVolume(volMusica);
+
+    // ... (Después de cargar músicaFondo) ...
+
+    // --- UI DEL MENU ---
+    // Fondo oscuro
     sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
-    fondoMenu.setFillColor(sf::Color(0, 0, 0, 150)); 
+    fondoMenu.setFillColor(sf::Color(0, 0, 0, 200)); 
 
-    // Caja del menú
-    sf::RectangleShape cajaMenu({400.f, 200.f});
-    cajaMenu.setOrigin({200.f, 100.f});
+    // Caja contenedora
+    sf::RectangleShape cajaMenu({500.f, 300.f});
+    cajaMenu.setOrigin({250.f, 150.f});
     cajaMenu.setPosition({(float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f});
-    cajaMenu.setFillColor(sf::Color(50, 50, 60));
-    cajaMenu.setOutlineThickness(2.f);
-    cajaMenu.setOutlineColor(sf::Color::White);
+    cajaMenu.setFillColor(sf::Color(40, 44, 52));
+    cajaMenu.setOutlineThickness(3.f);
+    cajaMenu.setOutlineColor(sf::Color(0, 255, 100)); // Verde tech
 
-    // Texto de Título del Menú
+    // Título
     sf::Text txtMenuTitulo(font);
-    txtMenuTitulo.setString("MENU DE PAUSA");
-    txtMenuTitulo.setCharacterSize(30);
+    txtMenuTitulo.setString("CONFIGURACION DE SISTEMAS");
+    txtMenuTitulo.setCharacterSize(28);
     txtMenuTitulo.setFillColor(sf::Color::White);
-    sf::FloatRect titleBounds = txtMenuTitulo.getLocalBounds();
-    txtMenuTitulo.setOrigin({titleBounds.size.x / 2.f, titleBounds.size.y / 2.f});
-    txtMenuTitulo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 50.f});
+    sf::FloatRect tb = txtMenuTitulo.getLocalBounds();
+    txtMenuTitulo.setOrigin({tb.size.x/2.f, tb.size.y/2.f});
+    txtMenuTitulo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 110.f});
 
-    // Texto de Volumen
-    sf::Text txtVolumen(font);
-    txtVolumen.setCharacterSize(20);
-    txtVolumen.setFillColor(sf::Color::Yellow);
-    // (La posición y el string se actualizarán en el bucle)
+    // --- ELEMENTOS FILA 1: MUSICA ---
+    sf::Text lblMusica(font, "MUSICA (BGM)", 20);
+    lblMusica.setPosition({cajaMenu.getPosition().x - 200.f, cajaMenu.getPosition().y - 50.f});
+    
+    sf::Text btnMenosMusica(font, "<", 30); // Botón visual izquierdo
+    btnMenosMusica.setPosition({cajaMenu.getPosition().x + 20.f, cajaMenu.getPosition().y - 60.f});
+    
+    sf::RectangleShape barraMusicaBg({100.f, 10.f});
+    barraMusicaBg.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y - 40.f});
+    barraMusicaBg.setFillColor(sf::Color(20, 20, 20));
+    
+    sf::RectangleShape barraMusicaFill({50.f, 10.f}); // Ancho dinámico
+    barraMusicaFill.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y - 40.f});
+    barraMusicaFill.setFillColor(sf::Color::Cyan);
 
-    // Barra de volumen (fondo y relleno)
-    sf::RectangleShape barraVolumenFondo({200.f, 20.f});
-    barraVolumenFondo.setOrigin({100.f, 10.f});
-    barraVolumenFondo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 20.f});
-    barraVolumenFondo.setFillColor(sf::Color(20, 20, 20));
+    sf::Text btnMasMusica(font, ">", 30); // Botón visual derecho
+    btnMasMusica.setPosition({cajaMenu.getPosition().x + 160.f, cajaMenu.getPosition().y - 60.f});
 
-    sf::RectangleShape barraVolumenRelleno({200.f, 20.f}); // El ancho cambiará dinámicamente
-    barraVolumenRelleno.setOrigin({0.f, 10.f}); // Origen a la izquierda para crecer
-    barraVolumenRelleno.setPosition({cajaMenu.getPosition().x - 100.f, cajaMenu.getPosition().y + 20.f});
-    barraVolumenRelleno.setFillColor(sf::Color(0, 255, 0));
+    sf::Text valMusicaTxt(font, "50%", 20);
+    valMusicaTxt.setPosition({cajaMenu.getPosition().x + 190.f, cajaMenu.getPosition().y - 50.f});
 
-    sf::Text txtInstruccionesVol(font);
-    txtInstruccionesVol.setString("Usa flechas IZQ / DER para ajustar\nPresiona ESC para volver");
-    txtInstruccionesVol.setCharacterSize(14);
-    txtInstruccionesVol.setFillColor(sf::Color(200, 200, 200));
-    sf::FloatRect instBounds = txtInstruccionesVol.getLocalBounds();
-    txtInstruccionesVol.setOrigin({instBounds.size.x / 2.f, instBounds.size.y / 2.f});
-    txtInstruccionesVol.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 70.f});
+    // --- ELEMENTOS FILA 2: EFECTOS ---
+    sf::Text lblEfectos(font, "EFECTOS (SFX)", 20);
+    lblEfectos.setPosition({cajaMenu.getPosition().x - 200.f, cajaMenu.getPosition().y + 20.f});
 
+    sf::Text btnMenosEfectos(font, "<", 30);
+    btnMenosEfectos.setPosition({cajaMenu.getPosition().x + 20.f, cajaMenu.getPosition().y + 10.f});
+
+    sf::RectangleShape barraEfectosBg({100.f, 10.f});
+    barraEfectosBg.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y + 30.f});
+    barraEfectosBg.setFillColor(sf::Color(20, 20, 20));
+
+    sf::RectangleShape barraEfectosFill({50.f, 10.f});
+    barraEfectosFill.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y + 30.f});
+    barraEfectosFill.setFillColor(sf::Color::Yellow);
+
+    sf::Text btnMasEfectos(font, ">", 30);
+    btnMasEfectos.setPosition({cajaMenu.getPosition().x + 160.f, cajaMenu.getPosition().y + 10.f});
+
+    sf::Text valEfectosTxt(font, "50%", 20);
+    valEfectosTxt.setPosition({cajaMenu.getPosition().x + 190.f, cajaMenu.getPosition().y + 20.f});
+
+    // Instrucciones pie de pagina
+    sf::Text txtInstruccionesVol(font, "ARRIBA/ABAJO: Seleccionar  |  IZQ/DER: Ajustar  |  ESC: Volver", 14);
+    txtInstruccionesVol.setFillColor(sf::Color(150, 150, 150));
+    sf::FloatRect ib = txtInstruccionesVol.getLocalBounds();
+    txtInstruccionesVol.setOrigin({ib.size.x/2.f, ib.size.y/2.f});
+    txtInstruccionesVol.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 110.f});
     // --- JUGADORES ---
     Jugador p1(1, {0.f, 0.f});
     Jugador p2(2, {700.f, 0.f});
@@ -282,34 +332,55 @@ int main() {
             // --- CONTROL DEL MENU ---
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
-                    // Si hay una acción en curso (apuntando, moviendo, etc), cancelar eso primero
-                    if (cargandoDisparo || apuntando || moviendo || sel != -1 || modoRadar || modoNotas) {
+                    // Si hay una acción en juego, cancelarla primero
+                    if (cargandoDisparo || apuntando || moviendo || sel != -1 || modoRadar || modoNotas || faseAtaqueAereo > 0) {
                         cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
-                        modoRadar = false; modoNotas = false;
+                        modoRadar = false; modoNotas = false; faseAtaqueAereo = 0;
                         lanzandoUAV = false; lanzandoUAVRefuerzo = false;
-                        faseAtaqueAereo = 0;
                         btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
                     } 
                     else {
-                        // Si no hay nada seleccionado, alternar menú
+                        // Alternar pausa
                         juegoPausado = !juegoPausado;
                     }
                 }
 
-                // Si el menú está abierto, controlar volumen
+                // CONTROLES DENTRO DEL MENU
                 if (juegoPausado) {
-                    if (k->code == sf::Keyboard::Key::Right || k->code == sf::Keyboard::Key::Up) {
-                        volumenActual += 5.f;
-                        if (volumenActual > 100.f) volumenActual = 100.f;
-                        musicaFondo.setVolume(volumenActual);
+                    // Navegar entre opciones (Musica vs Efectos)
+                    if (k->code == sf::Keyboard::Key::Up || k->code == sf::Keyboard::Key::Down) {
+                        opcionMenuSeleccionada = (opcionMenuSeleccionada == 0) ? 1 : 0;
                     }
-                    else if (k->code == sf::Keyboard::Key::Left || k->code == sf::Keyboard::Key::Down) {
-                        volumenActual -= 5.f;
-                        if (volumenActual < 0.f) volumenActual = 0.f;
-                        musicaFondo.setVolume(volumenActual);
+
+                    // Ajustar valores
+                    if (k->code == sf::Keyboard::Key::Left) {
+                        if (opcionMenuSeleccionada == 0) { // Musica
+                            volMusica -= 5.f;
+                            if (volMusica < 0.f) volMusica = 0.f;
+                            musicaFondo.setVolume(volMusica);
+                        } else { // Efectos
+                            volEfectos -= 5.f;
+                            if (volEfectos < 0.f) volEfectos = 0.f;
+                            // Aquí actualizarías el volumen de tus efectos futuros
+                            sRadar.setVolume(volEfectos);
+                        }
+                    }
+                    else if (k->code == sf::Keyboard::Key::Right) {
+                        if (opcionMenuSeleccionada == 0) { // Musica
+                            volMusica += 5.f;
+                            if (volMusica > 100.f) volMusica = 100.f;
+                            musicaFondo.setVolume(volMusica);
+                        } else { // Efectos
+                            volEfectos += 5.f;
+                            if (volEfectos > 100.f) volEfectos = 100.f;
+                            sRadar.setVolume(volEfectos);
+                        }
                     }
                 }
             }
+
+            // SI EL JUEGO ESTA PAUSADO, IGNORAR CLICKS
+            if (juegoPausado) continue;
 
             // SI EL JUEGO ESTA PAUSADO, IGNORAR RESTO DE INPUTS (CLICKS)
             if (juegoPausado) continue;
@@ -409,6 +480,7 @@ int main() {
                             else {
                                 modoRadar = false;
                                 btnRadar.resetColor();
+                                sRadar.stop();
                             }
                         }
 
@@ -534,6 +606,7 @@ int main() {
                     modoRadar = false; modoNotas = false;
                     lanzandoUAV = false; lanzandoUAVRefuerzo = false;
                     faseAtaqueAereo = 0; // Cancelar si es posible
+                    sRadar.stop();
                     btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
                 }
             }
@@ -550,6 +623,7 @@ int main() {
                     if (scale.x < 0.15f) uavSprite.setScale({scale.x + 0.0005f, scale.y + 0.0005f});
                     if (uavSprite.getPosition().y < -50.f) {
                         lanzandoUAV = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
+                        sRadar.play();
                     }
                 } else {
                     uavShapeFallback.move({0.f, -3.0f});
@@ -569,6 +643,7 @@ int main() {
                 uavShapeFallback.move({0.f, -5.0f});
                 if (uavShapeFallback.getPosition().y < -50.f) {
                     lanzandoUAVRefuerzo = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
+                    sRadar.play();
                 }
             }
         }
@@ -844,25 +919,57 @@ int main() {
             }
         }
 
-        // --- DIBUJAR MENU SUPERPUESTO (Siempre al final) ---
+        // --- DIBUJAR MENU SUPERPUESTO ---
         if (juegoPausado) {
             window.draw(fondoMenu);
             window.draw(cajaMenu);
             window.draw(txtMenuTitulo);
-            window.draw(barraVolumenFondo);
-            
-            // Actualizar barra visual
-            float anchoBarra = (volumenActual / 100.f) * 200.f;
-            barraVolumenRelleno.setSize({anchoBarra, 20.f});
-            window.draw(barraVolumenRelleno);
 
-            // Actualizar texto porcentaje
-            txtVolumen.setString("Volumen: " + std::to_string((int)volumenActual) + "%");
-            sf::FloatRect volBounds = txtVolumen.getLocalBounds();
-            txtVolumen.setOrigin({volBounds.size.x / 2.f, volBounds.size.y / 2.f});
-            txtVolumen.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 10.f});
-            window.draw(txtVolumen);
+            // --- ACTUALIZAR VISUALES ---
             
+            // Colores de selección (Resaltar fila activa)
+            sf::Color colSel = sf::Color(0, 255, 100); // Verde brillante
+            sf::Color colNorm = sf::Color::White;
+
+            if (opcionMenuSeleccionada == 0) {
+                lblMusica.setFillColor(colSel);
+                btnMenosMusica.setFillColor(colSel);
+                btnMasMusica.setFillColor(colSel);
+                lblEfectos.setFillColor(colNorm);
+                btnMenosEfectos.setFillColor(colNorm);
+                btnMasEfectos.setFillColor(colNorm);
+            } else {
+                lblMusica.setFillColor(colNorm);
+                btnMenosMusica.setFillColor(colNorm);
+                btnMasMusica.setFillColor(colNorm);
+                lblEfectos.setFillColor(colSel);
+                btnMenosEfectos.setFillColor(colSel);
+                btnMasEfectos.setFillColor(colSel);
+            }
+
+            // Actualizar barras y textos numéricos
+            barraMusicaFill.setSize({volMusica, 10.f}); // 100px max ancho = 100% volumen
+            valMusicaTxt.setString(std::to_string((int)volMusica) + "%");
+
+            barraEfectosFill.setSize({volEfectos, 10.f});
+            valEfectosTxt.setString(std::to_string((int)volEfectos) + "%");
+
+            // --- DIBUJAR FILA 1 (MUSICA) ---
+            window.draw(lblMusica);
+            window.draw(btnMenosMusica);
+            window.draw(barraMusicaBg);
+            window.draw(barraMusicaFill);
+            window.draw(btnMasMusica);
+            window.draw(valMusicaTxt);
+
+            // --- DIBUJAR FILA 2 (EFECTOS) ---
+            window.draw(lblEfectos);
+            window.draw(btnMenosEfectos);
+            window.draw(barraEfectosBg);
+            window.draw(barraEfectosFill);
+            window.draw(btnMasEfectos);
+            window.draw(valEfectosTxt);
+
             window.draw(txtInstruccionesVol);
         }
 
