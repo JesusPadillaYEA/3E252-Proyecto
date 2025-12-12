@@ -112,6 +112,22 @@ int main() {
     sf::Sound sUAV(bufferUAV);
     sUAV.setVolume(volEfectos);
 
+    // >>> NUEVO: SONIDO DE INTERFAZ (BOTONES) <<<
+    sf::SoundBuffer bufferButton;
+    if (!bufferButton.loadFromFile("assets/sounds/button.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/sounds/button.ogg" << std::endl;
+    }
+    sf::Sound sButton(bufferButton);
+    sButton.setVolume(volEfectos);
+
+    // >>> NUEVO: SONIDO AIR STRIKE <<<
+    sf::SoundBuffer bufferAirStrike;
+    if (!bufferAirStrike.loadFromFile("assets/sounds/airstrike.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/sounds/airstrike.ogg" << std::endl;
+    }
+    sf::Sound sAirStrike(bufferAirStrike);
+    sAirStrike.setVolume(volEfectos);
+
     // --- UI DEL MENU ---
     // Fondo oscuro
     sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
@@ -348,6 +364,7 @@ int main() {
                         btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
                         sRadar.stop(); 
                         sUAV.stop();
+                        sAirStrike.stop();
                     } 
                     else {
                         // Alternar pausa
@@ -359,11 +376,13 @@ int main() {
                 if (juegoPausado) {
                     // Navegar entre opciones (Musica vs Efectos)
                     if (k->code == sf::Keyboard::Key::Up || k->code == sf::Keyboard::Key::Down) {
+                        sButton.play();
                         opcionMenuSeleccionada = (opcionMenuSeleccionada == 0) ? 1 : 0;
                     }
 
                     // Ajustar valores
                     if (k->code == sf::Keyboard::Key::Left) {
+                        sButton.play();
                         if (opcionMenuSeleccionada == 0) { // Musica
                             volMusica -= 5.f;
                             if (volMusica < 0.f) volMusica = 0.f;
@@ -374,9 +393,12 @@ int main() {
                             // Aquí actualizarías el volumen de tus efectos futuros
                             sRadar.setVolume(volEfectos);
                             sUAV.setVolume(volEfectos);
+                            sButton.setVolume(volEfectos);
+                            sAirStrike.setVolume(volEfectos);
                         }
                     }
                     else if (k->code == sf::Keyboard::Key::Right) {
+                        sButton.play();
                         if (opcionMenuSeleccionada == 0) { // Musica
                             volMusica += 5.f;
                             if (volMusica > 100.f) volMusica = 100.f;
@@ -386,6 +408,8 @@ int main() {
                             if (volEfectos > 100.f) volEfectos = 100.f;
                             sRadar.setVolume(volEfectos);
                             sUAV.setVolume(volEfectos);
+                            sButton.setVolume(volEfectos);
+                            sAirStrike.setVolume(volEfectos);
                         }
                     }
                 }
@@ -447,6 +471,7 @@ int main() {
                         
                         // --- BOTON RADAR ---
                         if (btnRadar.esClickeado(mousePos) && !modoNotas) {
+                            sButton.play();
                             if (!modoRadar) {
                                 if (jugadorActual->radarRefuerzoPendiente) {
                                     msgError = "SOLICITUD EN PROCESO. REFUERZOS LLEGAN SIGUIENTE TURNO.";
@@ -500,6 +525,7 @@ int main() {
 
                         // --- BOTON NOTAS ---
                         else if (btnNotas.esClickeado(mousePos) && !modoRadar) {
+                            sButton.play();
                             modoNotas = !modoNotas;
                             if (modoNotas) {
                                 btnNotas.setColor(sf::Color::White); 
@@ -522,6 +548,7 @@ int main() {
                         if (sel != -1) {
                             // CLICK EN BOTONES DEL BARCO
                             if (btnAtacar.esClickeado(mousePos)) {
+                                sButton.play();
                                 bool esPortaviones = (jugadorActual->getFlota()[sel].nombre.find("Portaviones") != std::string::npos);
                                 
                                 if (esPortaviones) {
@@ -533,6 +560,7 @@ int main() {
                                         // INICIAR ANIMACION (Sin flecha, directo)
                                         faseAtaqueAereo = 1; // Fase 1: Espera
                                         timerAtaqueAereo.restart();
+                                        sAirStrike.play();
                                         
                                         auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
                                         sf::Vector2f centro = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
@@ -563,6 +591,7 @@ int main() {
                                 }
                             } 
                             else if (btnMover.esClickeado(mousePos)) {
+                                sButton.play();
                                 if (moviendo) {
                                     IndicatorManager::actualizarTurnos(*jugadorActual);
                                     moviendo = false; sel = -1; btnMover.resetColor();
@@ -687,7 +716,10 @@ int main() {
                 sf::Vector2f scale = sAvionAtaque.getScale();
                 if (scale.x < 0.25f) sAvionAtaque.setScale({scale.x + 0.001f, scale.y + 0.001f});
 
-                if (sAvionAtaque.getPosition().y < -100.f) {
+                bool avionFuera = (sAvionAtaque.getPosition().y < -100.f);
+                bool sonidoTerminado = (sAirStrike.getStatus() == sf::Sound::Status::Stopped);
+
+                if (avionFuera && sonidoTerminado) {
                     // FIN DEL ATAQUE
                     faseAtaqueAereo = 0;
                     if (jugadorEnemigo) {
