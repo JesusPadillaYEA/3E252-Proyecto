@@ -51,6 +51,10 @@ int main() {
     Boton btnAtacar(font, "ATACAR", {200, 50, 50});
     Boton btnMover(font, "MOVER", {50, 150, 50});
     
+    // CORRECCIÓN: Inicializamos con un color gris oscuro y luego ponemos la posición
+    Boton btnRadar(font, "RADAR", sf::Color(80, 80, 80)); 
+    btnRadar.setPosition({850.f, 20.f}); // <--- Aquí asignamos la coordenada X=850
+
     sf::Text txtInfo(font);
     txtInfo.setCharacterSize(20);
     txtInfo.setOutlineThickness(2.f);
@@ -62,13 +66,16 @@ int main() {
     bool moviendo = false;
     bool apuntando = false;
     
+    // Estado del Radar
+    bool modoRadar = false;
+
     // Variables Disparo
     bool cargandoDisparo = false;
     float potenciaActual = 0.f;
     const float VELOCIDAD_CARGA = 5.0f;
     const float MAX_DISTANCIA = 1500.f;
 
-    // Variables de Estado Visual (Persistentes para el cálculo preciso)
+    // Variables de Estado Visual
     bool enZonaEnemiga = false;
     sf::Vector2f origenDisparoReal(0,0); 
 
@@ -100,7 +107,8 @@ int main() {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
                     estado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
                     sel = -1; moviendo = false; apuntando = false; cargandoDisparo = false;
-                    btnMover.resetColor(); btnAtacar.resetColor();
+                    modoRadar = false; 
+                    btnMover.resetColor(); btnAtacar.resetColor(); btnRadar.resetColor();
                 }
                 continue;
             }
@@ -111,6 +119,23 @@ int main() {
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
                     
+                    // 1. Radar
+                    if (!apuntando && !cargandoDisparo && jugadorActual) {
+                        if (btnRadar.esClickeado(mousePos)) {
+                            modoRadar = !modoRadar; 
+                            
+                            if (modoRadar) {
+                                btnRadar.setColor(sf::Color::Red);
+                                sel = -1; moviendo = false;
+                            } else {
+                                btnRadar.resetColor();
+                            }
+                        }
+                    }
+
+                    if (modoRadar) continue;
+
+                    // 2. Juego Normal
                     if (apuntando && sel != -1) {
                         cargandoDisparo = true;
                         potenciaActual = 0.f;
@@ -133,7 +158,7 @@ int main() {
                             }
                         }
 
-                        if (!btnAtacar.esClickeado(mousePos) && !btnMover.esClickeado(mousePos) && jugadorActual) {
+                        if (!btnAtacar.esClickeado(mousePos) && !btnMover.esClickeado(mousePos) && !btnRadar.esClickeado(mousePos) && jugadorActual) {
                             bool hit = false;
                             auto& flota = jugadorActual->getFlota();
                             for (size_t i = 0; i < flota.size(); ++i) {
@@ -157,7 +182,6 @@ int main() {
                     if (cargandoDisparo && apuntando && sel != -1) {
                         cargandoDisparo = false;
 
-                        // MATEMÁTICA DE DISPARO (Consistente con la visual)
                         sf::Vector2f diff = mousePos - origenDisparoReal;
                         float angulo = std::atan2(diff.y, diff.x);
                         
@@ -165,7 +189,6 @@ int main() {
                         impacto.x = origenDisparoReal.x + std::cos(angulo) * potenciaActual;
                         impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
 
-                        // Procesar Impacto
                         if (jugadorEnemigo) {
                             AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
                         }
@@ -180,8 +203,9 @@ int main() {
 
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
-                    cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1;
-                    btnAtacar.resetColor(); btnMover.resetColor();
+                    cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
+                    modoRadar = false; 
+                    btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor();
                 }
             }
         }
@@ -212,9 +236,8 @@ int main() {
              btnMover.setPosition({p.x + 110.f, yBtn});
         }
 
-        // --- CÁLCULO DE POSICIÓN VISUAL ---
+        // --- CÁLCULO VISUAL ---
         sf::Vector2f impactoVisual(0,0);
-        
         if (apuntando && sel != -1 && jugadorActual) {
             auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
             sf::Vector2f centroBarco = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
@@ -244,50 +267,72 @@ int main() {
         }
         else if (jugadorActual) {
             
-            if (enZonaEnemiga && apuntando) {
-                // >>> MODO ATAQUE (NIEBLA DE GUERRA) <<<
-                // Fondo Rojo
-                sf::RectangleShape overlay(sf::Vector2f((float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y));
-                overlay.setFillColor(sf::Color(255, 0, 0, 40)); 
-                window.draw(overlay);
-
-                // IMPORTANTE: Aquí se ELIMINÓ la llamada a renderizarFlota del enemigo.
-                // Ahora es invisible, tal como pediste.
-
-                txtInfo.setString("! ZONA ENEMIGA ! SUELTA PARA DISPARAR");
+            // >>> MODO RADAR <<<
+            if (modoRadar && jugadorEnemigo) {
+                txtInfo.setString("-- RADAR ACTIVO: DETECTANDO HOSTILES --");
                 txtInfo.setFillColor(sf::Color::Red);
-                float textoY = impactoVisual.y - 40.f;
-                if (textoY < 10) textoY = impactoVisual.y + 20.f;
-                
-                txtInfo.setPosition({impactoVisual.x + 20.f, textoY});
+                txtInfo.setPosition({250.f, 20.f}); 
                 window.draw(txtInfo);
 
-            } else {
-                // >>> MODO NORMAL (Tu flota visible) <<<
-                sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
-                if (apuntando) cBorde = sf::Color::Red;
+                for (const auto& barco : jugadorEnemigo->getFlota()) {
+                    if (!barco.destruido) {
+                        sf::CircleShape blip(8.f); 
+                        blip.setFillColor(sf::Color::Red);
+                        blip.setOutlineColor(sf::Color(255, 100, 100)); 
+                        blip.setOutlineThickness(2.f);
+                        
+                        sf::FloatRect b = barco.sprite.getGlobalBounds();
+                        blip.setPosition({b.position.x + b.size.x/2.f - 8.f, b.position.y + b.size.y/2.f - 8.f});
+                        
+                        window.draw(blip);
+                    }
+                }
                 
-                RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
-                IndicatorManager::renderizarPistas(window, *jugadorActual, false);
-
-                if (apuntando) {
-                    txtInfo.setString("Arrastra hacia territorio enemigo...");
-                    txtInfo.setFillColor(sf::Color::Yellow);
-                    txtInfo.setPosition({300.f, 20.f});
-                    window.draw(txtInfo);
-                }
-
-                if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo) {
-                    btnAtacar.dibujar(window);
-                    btnMover.dibujar(window);
-                }
+                btnRadar.dibujar(window);
             }
+            // >>> MODO NORMAL <<<
+            else {
+                if (enZonaEnemiga && apuntando) {
+                    sf::RectangleShape overlay(sf::Vector2f((float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y));
+                    overlay.setFillColor(sf::Color(255, 0, 0, 40)); 
+                    window.draw(overlay);
 
-            // --- VECTOR DE APUNTADO ---
-            if (apuntando && sel != -1) {
-                sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-                float pot = cargandoDisparo ? potenciaActual : 50.f;
-                IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
+                    txtInfo.setString("! ZONA ENEMIGA ! SUELTA PARA DISPARAR");
+                    txtInfo.setFillColor(sf::Color::Red);
+                    float textoY = impactoVisual.y - 40.f;
+                    if (textoY < 10) textoY = impactoVisual.y + 20.f;
+                    txtInfo.setPosition({impactoVisual.x + 20.f, textoY});
+                    window.draw(txtInfo);
+
+                } else {
+                    sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
+                    if (apuntando) cBorde = sf::Color::Red;
+                    
+                    RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
+                    IndicatorManager::renderizarPistas(window, *jugadorActual, false);
+
+                    if (apuntando) {
+                        txtInfo.setString("Arrastra hacia territorio enemigo...");
+                        txtInfo.setFillColor(sf::Color::Yellow);
+                        txtInfo.setPosition({300.f, 20.f});
+                        window.draw(txtInfo);
+                    }
+
+                    if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo) {
+                        btnAtacar.dibujar(window);
+                        btnMover.dibujar(window);
+                    }
+                }
+
+                if (apuntando && sel != -1) {
+                    sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                    float pot = cargandoDisparo ? potenciaActual : 50.f;
+                    IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
+                }
+
+                if (!apuntando && !cargandoDisparo) {
+                    btnRadar.dibujar(window);
+                }
             }
         }
 
