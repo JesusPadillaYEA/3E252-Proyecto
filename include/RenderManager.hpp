@@ -5,10 +5,11 @@
 
 namespace RenderManager {
 
-    // Añadimos parámetro 'rotacion' (grados)
+    // Se agrega el parámetro 'debugHitbox' al final (por defecto false)
     inline void renderizarFlota(sf::RenderWindow& window, const std::vector<BarcoEntity>& flota, 
                                 int indiceSeleccionado, EstadoJuego estadoActual,
-                                bool moviendo, const sf::Color& colorBorde, float rotacion = 0.f) {
+                                bool moviendo, const sf::Color& colorBorde, float rotacion = 0.f,
+                                bool debugHitbox = false) { 
         
         for (size_t i = 0; i < flota.size(); ++i) {
             const auto& barco = flota[i];
@@ -38,16 +39,38 @@ namespace RenderManager {
 
             window.draw(dibujo);
 
-            // Borde selección (también rotado si aplica)
+            // Borde selección
             if ((int)i == indiceSeleccionado) {
-                // Nota: Simplificación, el borde no rota aquí para no complicar el código de UI
-                // Si rotamos la flota enemiga, normalmente no la estamos seleccionando
                 sf::RectangleShape borde(barco.sprite.getGlobalBounds().size);
                 borde.setPosition(barco.sprite.getPosition());
                 borde.setFillColor(sf::Color::Transparent);
                 borde.setOutlineThickness(2.f);
                 borde.setOutlineColor(colorBorde);
                 window.draw(borde);
+            }
+
+            // --- DEBUG HITBOX (SOLUCIÓN BUG) ---
+            if (debugHitbox) {
+                sf::FloatRect bounds = dibujo.getGlobalBounds();
+                
+                // 1. Rectángulo de la hitbox
+                sf::RectangleShape rectDebug(bounds.size);
+                rectDebug.setPosition(bounds.position);
+                rectDebug.setFillColor(sf::Color::Transparent);
+                rectDebug.setOutlineThickness(1.f);
+                rectDebug.setOutlineColor(sf::Color::Magenta); 
+                
+                // 2. Una X para verificar el centro y alineación
+                // CORRECCIÓN SFML 3.0: Usamos llaves {} para inicializar sf::Vertex
+                sf::Vertex lineas[] = {
+                    sf::Vertex{bounds.position, sf::Color::Magenta},
+                    sf::Vertex{bounds.position + bounds.size, sf::Color::Magenta},
+                    sf::Vertex{sf::Vector2f(bounds.position.x + bounds.size.x, bounds.position.y), sf::Color::Magenta},
+                    sf::Vertex{sf::Vector2f(bounds.position.x, bounds.position.y + bounds.size.y), sf::Color::Magenta}
+                };
+
+                window.draw(rectDebug);
+                window.draw(lineas, 4, sf::PrimitiveType::Lines);
             }
         }
     }

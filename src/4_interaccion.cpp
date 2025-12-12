@@ -43,7 +43,7 @@ int main() {
     GeneradorFlotas::inicializarFlota(p1, tDest, tPort, tSub);
     GeneradorFlotas::inicializarFlota(p2, tDest, tPort, tSub);
 
-    // --- ZONAS (SFML 3.0) ---
+    // --- ZONAS ---
     sf::FloatRect zonaIzquierda({0.f, 0.f}, {500.f, 700.f});
     sf::FloatRect zonaDerecha({500.f, 0.f}, {500.f, 700.f});
 
@@ -57,6 +57,15 @@ int main() {
     txtInfo.setFillColor(sf::Color::Yellow);
     txtInfo.setPosition({350.f, 20.f});
 
+    // --- DEBUG MARKER (Para ver dónde cae el disparo realmente) ---
+    sf::CircleShape debugMarker(10.f);
+    debugMarker.setFillColor(sf::Color::Red);
+    debugMarker.setOutlineColor(sf::Color::White);
+    debugMarker.setOutlineThickness(2.f);
+    debugMarker.setOrigin({10.f, 10.f});
+    sf::Clock debugTimer;
+    bool showDebugMarker = false;
+
     EstadoJuego estado = MENSAJE_P1;
     int sel = -1;
     bool moviendo = false;
@@ -68,26 +77,27 @@ int main() {
     const float VELOCIDAD_CARGA = 5.0f;
     const float MAX_DISTANCIA = 1500.f;
 
+    // Variables de Estado Visual (Persistentes para el cálculo)
+    bool enZonaEnemiga = false;
+    sf::Vector2f origenDisparoReal(0,0); // Guardará desde dónde sale la bala realmente
+
     while (window.isOpen()) {
         Jugador* jugadorActual = nullptr;
         Jugador* jugadorEnemigo = nullptr;
         sf::FloatRect* zonaObjetivo = nullptr;
 
-        // 1. Configurar Jugadores
         if (estado == TURNO_P1) {
             jugadorActual = &p1; jugadorEnemigo = &p2;
         } else if (estado == TURNO_P2) {
             jugadorActual = &p2; jugadorEnemigo = &p1;
         }
 
-        // 2. Determinar Zona Objetivo Dinámica (Lógica de Lados)
-        // Si el barco está a la izquierda (<500), ataca a la derecha. Y viceversa.
+        // Determinar Zona Objetivo
         if (sel != -1 && jugadorActual) {
             float barcoX = jugadorActual->getFlota()[sel].sprite.getPosition().x;
             if (barcoX < 500.f) zonaObjetivo = &zonaDerecha;
             else zonaObjetivo = &zonaIzquierda;
         } else {
-            // Fallback por seguridad
             zonaObjetivo = (estado == TURNO_P1) ? &zonaDerecha : &zonaIzquierda;
         }
 
@@ -156,32 +166,32 @@ int main() {
                     if (cargandoDisparo && apuntando && sel != -1) {
                         cargandoDisparo = false;
 
-                        auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
-                        sf::Vector2f origen = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
-                        sf::Vector2f diff = mousePos - origen;
+                        // >>> CORRECCIÓN CRÍTICA DE PUNTERÍA <<<
+                        // Usamos 'origenDisparoReal' que se calcula igual que la línea visual
+                        sf::Vector2f diff = mousePos - origenDisparoReal;
                         float angulo = std::atan2(diff.y, diff.x);
                         
                         sf::Vector2f impacto;
-                        impacto.x = origen.x + std::cos(angulo) * potenciaActual;
-                        impacto.y = origen.y + std::sin(angulo) * potenciaActual;
+                        impacto.x = origenDisparoReal.x + std::cos(angulo) * potenciaActual;
+                        impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
 
-                        // Verificar si el impacto cae en la zona VÁLIDA
-                        bool enZonaCorrecta = zonaObjetivo && zonaObjetivo->contains(impacto);
-                        bool enVentana = (impacto.x >= 0 && impacto.x <= WINDOW_SIZE.x && 
-                                          impacto.y >= 0 && impacto.y <= WINDOW_SIZE.y);
+                        // Debug Marker: Mostrar dónde cayó realmente
+                        debugMarker.setPosition(impacto);
+                        showDebugMarker = true;
+                        debugTimer.restart();
 
-                        if (enZonaCorrecta && enVentana) {
-                            if (jugadorEnemigo) {
-                                AttackManager::procesarDisparo(impacto, origen, *jugadorEnemigo);
-                            }
-                            IndicatorManager::actualizarTurnos(*jugadorActual);
-                            apuntando = false; sel = -1;
-                            btnAtacar.resetColor();
-                            estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
-                        } else {
-                            std::cout << ">>> DISPARO INVALIDO" << std::endl;
-                            potenciaActual = 0.f;
+                        std::cout << ">>> Disparo desde (" << origenDisparoReal.x << ", " << origenDisparoReal.y 
+                                  << ") hacia (" << impacto.x << ", " << impacto.y << ")" << std::endl;
+
+                        // Procesar Impacto
+                        if (jugadorEnemigo) {
+                            AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
                         }
+                        
+                        IndicatorManager::actualizarTurnos(*jugadorActual);
+                        apuntando = false; sel = -1;
+                        btnAtacar.resetColor();
+                        estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                     }
                 }
             }
@@ -220,37 +230,34 @@ int main() {
              btnMover.setPosition({p.x + 110.f, yBtn});
         }
 
+        // --- CÁLCULO DE POSICIÓN VISUAL Y LÓGICA ---
+        sf::Vector2f impactoVisual(0,0);
+        
+        if (apuntando && sel != -1 && jugadorActual) {
+            auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
+            sf::Vector2f centroBarco = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
+            sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+            
+            // Lógica de cambio de origen (Visual y Lógica ahora sincronizadas)
+            if (zonaObjetivo && zonaObjetivo->contains(mousePos)) {
+                enZonaEnemiga = true;
+                // Si estamos en zona enemiga, el disparo sale visualmente desde abajo (Artillería)
+                origenDisparoReal = {centroBarco.x, (float)WINDOW_SIZE.y};
+            } else {
+                enZonaEnemiga = false;
+                origenDisparoReal = centroBarco;
+            }
+
+            // Calcular impacto visual
+            float pot = cargandoDisparo ? potenciaActual : 50.f;
+            sf::Vector2f diff = mousePos - origenDisparoReal;
+            float ang = std::atan2(diff.y, diff.x);
+            impactoVisual = origenDisparoReal + sf::Vector2f(std::cos(ang)*pot, std::sin(ang)*pot);
+        }
+
         // --- DRAW ---
         window.clear();
         window.draw(fondo);
-
-        // -- ESTADO VISUAL: ¿MODO ATAQUE TOTAL O NORMAL? --
-        bool visualModoAtaque = false;
-        sf::Vector2f impactoVisual(0,0);
-        sf::Vector2f origenVisual(0,0);
-
-        if (apuntando && sel != -1 && jugadorActual) {
-            auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
-            sf::Vector2f centro = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
-            sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-            
-            // Si el mouse entra en la zona enemiga, activamos el "Modo Visual de Ataque"
-            // (Como en la primera versión: pantalla roja, ocultar todo lo propio)
-            if (zonaObjetivo && zonaObjetivo->contains(mousePos)) {
-                visualModoAtaque = true;
-                
-                // En modo ataque visual, el origen es la artillería inferior
-                origenVisual = {centro.x, (float)WINDOW_SIZE.y};
-            } else {
-                origenVisual = centro;
-            }
-
-            // Calcular impacto
-            float pot = cargandoDisparo ? potenciaActual : 50.f;
-            sf::Vector2f diff = mousePos - origenVisual;
-            float ang = std::atan2(diff.y, diff.x);
-            impactoVisual = origenVisual + sf::Vector2f(std::cos(ang)*pot, std::sin(ang)*pot);
-        }
 
         // --- RENDERIZADO ---
         if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
@@ -258,24 +265,36 @@ int main() {
         }
         else if (jugadorActual) {
             
-            if (visualModoAtaque) {
-                // >>> VISUAL ATAQUE TOTAL (Reciclando lógica V1) <<<
-                // 1. Filtro Rojo en TODA la pantalla
+            if (enZonaEnemiga && apuntando) {
+                // >>> VISUAL ATAQUE TOTAL <<<
                 sf::RectangleShape overlay(sf::Vector2f((float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y));
                 overlay.setFillColor(sf::Color(255, 0, 0, 40)); 
                 window.draw(overlay);
 
-                // 2. NO DIBUJAMOS BARCOS PROPIOS (Estamos concentrados en el enemigo)
-                // 3. NO DIBUJAMOS BOTONES
+                // DEBUG: MOSTRAR ENEMIGOS CON HITBOX
+                if (jugadorEnemigo) {
+                    RenderManager::renderizarFlota(
+                        window, 
+                        jugadorEnemigo->getFlota(), 
+                        -1, 
+                        estado, 
+                        false, 
+                        sf::Color::White, 
+                        0.f, 
+                        true // HITBOX DEBUG ACTIVADO
+                    );
+                }
 
-                // 4. Texto de Confirmación
                 txtInfo.setString("! ZONA ENEMIGA ! SUELTA PARA DISPARAR");
                 txtInfo.setFillColor(sf::Color::Red);
-                txtInfo.setPosition({impactoVisual.x + 20.f, impactoVisual.y - 40.f});
+                float textoY = impactoVisual.y - 40.f;
+                if (textoY < 10) textoY = impactoVisual.y + 20.f;
+                
+                txtInfo.setPosition({impactoVisual.x + 20.f, textoY});
                 window.draw(txtInfo);
 
             } else {
-                // >>> VISUAL NORMAL (Tu flota visible) <<<
+                // >>> VISUAL NORMAL <<<
                 sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
                 if (apuntando) cBorde = sf::Color::Red;
                 
@@ -289,22 +308,28 @@ int main() {
                     window.draw(txtInfo);
                 }
 
-                // Botones (Solo si no estamos cargando disparo para no estorbar)
                 if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo) {
                     btnAtacar.dibujar(window);
                     btnMover.dibujar(window);
                 }
             }
 
-            // --- VECTOR DE APUNTADO (Siempre visible si apuntas) ---
+            // --- VECTOR DE APUNTADO ---
             if (apuntando && sel != -1) {
                 sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
                 float pot = cargandoDisparo ? potenciaActual : 50.f;
-                
-                // Usamos el origenVisual que cambia dinámicamente (Barco o Fondo)
-                IndicatorManager::dibujarVectorApuntado(window, origenVisual, mousePos, pot, font);
+                IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
             }
         }
+
+        // --- DIBUJAR MARCADOR DE DEBUG (Dura 1.5 segundos) ---
+        if (showDebugMarker) {
+            window.draw(debugMarker);
+            if (debugTimer.getElapsedTime().asSeconds() > 1.5f) {
+                showDebugMarker = false;
+            }
+        }
+
         window.display();
     }
     return 0;
