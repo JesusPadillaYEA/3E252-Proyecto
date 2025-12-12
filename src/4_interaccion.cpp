@@ -2,7 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <string> // Necesario para to_string
+#include <string> 
 
 #include "EstadoJuego.hpp"
 #include "Boton.hpp"
@@ -17,7 +17,7 @@
 
 int main() {
     const sf::Vector2u WINDOW_SIZE(1000, 700);
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Cooldown y Notas (SFML 3.0)");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Bitacora (SFML 3.0)");
     window.setFramerateLimit(60);
 
     // --- RECURSOS ---
@@ -64,10 +64,8 @@ int main() {
     // --- UI ---
     Boton btnAtacar(font, "ATACAR", {200, 50, 50});
     Boton btnMover(font, "MOVER", {50, 150, 50});
-    
     Boton btnRadar(font, "RADAR", sf::Color(60, 70, 80)); 
     btnRadar.setPosition({850.f, 20.f}); 
-
     Boton btnNotas(font, "NOTAS", sf::Color(139, 100, 60)); 
     btnNotas.setPosition({730.f, 20.f}); 
 
@@ -78,8 +76,10 @@ int main() {
     txtInfo.setPosition({350.f, 20.f});
 
     // ==========================================
-    // >>> RECURSOS VISUALES <<<
+    // >>> RECURSOS ESTÉTICOS (RADAR Y NOTAS) <<<
     // ==========================================
+    
+    // 1. Radar (Verde Tech)
     const sf::Vector2f radarCenter((float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f);
     const sf::Color neonGreen(0, 255, 100);
     const sf::Color neonRed(255, 50, 50);
@@ -122,8 +122,29 @@ int main() {
     sweepGlow.setPosition(radarCenter);
     sweepGlow.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
 
-    sf::RectangleShape fondoNotas((sf::Vector2f)WINDOW_SIZE);
-    fondoNotas.setFillColor(sf::Color(210, 195, 140)); 
+    // 2. Fondo NOTAS (Gradiente Radial "Papel Viejo")
+    sf::Color papelClaro(245, 235, 200); // Amarillo Hueso (Centro)
+    sf::Color papelOscuro(100, 70, 40);  // Café Oscuro (Bordes)
+
+    // Usamos TriangleFan para simular gradiente radial
+    sf::VertexArray fondoNotas(sf::PrimitiveType::TriangleFan, 6);
+    // Centro
+    fondoNotas[0] = sf::Vertex{radarCenter, papelClaro};
+    // Esquinas (orden manecillas reloj + cierre)
+    fondoNotas[1] = sf::Vertex{{0.f, 0.f}, papelOscuro};
+    fondoNotas[2] = sf::Vertex{{(float)WINDOW_SIZE.x, 0.f}, papelOscuro};
+    fondoNotas[3] = sf::Vertex{{(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y}, papelOscuro};
+    fondoNotas[4] = sf::Vertex{{0.f, (float)WINDOW_SIZE.y}, papelOscuro};
+    fondoNotas[5] = sf::Vertex{{0.f, 0.f}, papelOscuro}; // Cerrar loop
+
+    // 3. Líneas de Cuaderno
+    std::vector<sf::RectangleShape> lineasCuaderno;
+    for(float y = 80.f; y < WINDOW_SIZE.y; y += 40.f) {
+        sf::RectangleShape linea({(float)WINDOW_SIZE.x, 1.f});
+        linea.setPosition({0.f, y});
+        linea.setFillColor(sf::Color(0, 0, 0, 40)); // Negro transparente
+        lineasCuaderno.push_back(linea);
+    }
     // ==========================================
 
     EstadoJuego estado = MENSAJE_P1;
@@ -131,7 +152,6 @@ int main() {
     bool moviendo = false;
     bool apuntando = false;
     
-    // --- LÓGICA DE RADAR Y UAV ---
     bool modoRadar = false;
     bool modoNotas = false; 
     bool lanzandoUAV = false;
@@ -176,27 +196,20 @@ int main() {
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
 
-            // >>> CAMBIO DE TURNO Y GESTIÓN DE REFUERZOS <<<
             if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
                     EstadoJuego siguienteEstado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
                     Jugador* siguienteJugador = (siguienteEstado == TURNO_P1) ? &p1 : &p2;
 
-                    // 1. Reducir Cooldown del siguiente jugador
                     if (siguienteJugador->cooldownRadar > 0) {
                         siguienteJugador->cooldownRadar--;
                     }
 
-                    // 2. Verificar si llegan refuerzos
                     if (siguienteJugador->radarRefuerzoPendiente) {
                         lanzandoUAVRefuerzo = true;
                         siguienteJugador->radarRefuerzoPendiente = false; 
+                        siguienteJugador->cooldownRadar = 2; // Regla: Enfriamiento desde llegada
                         
-                        // REGLA: "el enfriamiento se toma desde que aparece"
-                        // Al llegar el refuerzo, activamos el cooldown de 2 turnos inmediatamente
-                        siguienteJugador->cooldownRadar = 2; 
-                        
-                        // Configurar inicio
                         sf::Vector2f posInicio = { (float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y + 100.f };
                         if (uavLoaded) {
                             uavSprite.setPosition(posInicio);
@@ -225,21 +238,18 @@ int main() {
                     
                     if (!apuntando && !cargandoDisparo && jugadorActual) {
                         
-                        // --- BOTÓN RADAR ---
+                        // BOTON RADAR
                         if (btnRadar.esClickeado(mousePos) && !modoNotas) {
                             if (!modoRadar) {
-                                // REGLA 1: Verificar si ya hay una solicitud pendiente
                                 if (jugadorActual->radarRefuerzoPendiente) {
                                     msgError = "SOLICITUD EN PROCESO. REFUERZOS LLEGAN SIGUIENTE TURNO.";
                                     errorTimer = 2.0f;
                                 }
-                                // REGLA 2: Verificar Cooldown
                                 else if (jugadorActual->cooldownRadar > 0) {
                                     msgError = "SISTEMA ENFRIANDOSE. ESPERA " + std::to_string(jugadorActual->cooldownRadar) + " TURNO(S).";
                                     errorTimer = 2.0f;
                                 }
                                 else {
-                                    // REGLA 3: Buscar Portaviones
                                     bool carrierFound = false;
                                     sf::Vector2f posInicio;
                                     for (const auto& barco : jugadorActual->getFlota()) {
@@ -252,7 +262,6 @@ int main() {
                                     }
                                     
                                     if (carrierFound) {
-                                        // CASO A: Despegue Normal (Inicia cooldown ahora)
                                         if (uavLoaded) {
                                             uavSprite.setPosition(posInicio);
                                             uavSprite.setRotation(sf::degrees(0));
@@ -262,18 +271,13 @@ int main() {
                                         }
                                         lanzandoUAV = true;
                                         uavTimer.restart();
-                                        
-                                        // Aplicar cooldown de 2 turnos
                                         jugadorActual->cooldownRadar = 2; 
                                         
                                         btnRadar.setColor(sf::Color::Red);
                                         sel = -1; moviendo = false; 
                                     } 
                                     else {
-                                        // CASO B: Sin Portaviones (Delayed)
-                                        // No aplicamos cooldown aquí, se aplica cuando llegue el refuerzo
                                         jugadorActual->radarRefuerzoPendiente = true;
-                                        
                                         msgError = "PORTAVIONES CAIDO. REFUERZOS LLEGAN EL PROXIMO TURNO.";
                                         errorTimer = 3.0f;
                                     }
@@ -285,7 +289,7 @@ int main() {
                             }
                         }
 
-                        // --- BOTÓN NOTAS ---
+                        // BOTON NOTAS
                         else if (btnNotas.esClickeado(mousePos) && !modoRadar) {
                             modoNotas = !modoNotas;
                             if (modoNotas) {
@@ -299,7 +303,7 @@ int main() {
 
                     if (modoRadar || modoNotas) continue; 
 
-                    // --- JUEGO NORMAL ---
+                    // JUEGO NORMAL
                     if (apuntando && sel != -1) {
                         cargandoDisparo = true;
                         potenciaActual = 0.f;
@@ -467,7 +471,6 @@ int main() {
             
             // >>> MODO RADAR <<<
             if (modoRadar && jugadorEnemigo) {
-                // GUARDAR DATOS EN MEMORIA
                 jugadorActual->memoriaRadar.clear(); 
                 for (const auto& barco : jugadorEnemigo->getFlota()) {
                     if (!barco.destruido) {
@@ -494,27 +497,47 @@ int main() {
                 window.draw(sweepGlow);
                 window.draw(sweepLine);
 
-                txtInfo.setString("ESCANEANDO... GUARDANDO COORDENADAS EN BITACORA");
+                txtInfo.setString("ESCANEANDO... GUARDANDO EN BITACORA");
                 txtInfo.setFillColor(neonGreen);
                 txtInfo.setPosition({WINDOW_SIZE.x / 2.f - 200.f, 50.f}); 
                 window.draw(txtInfo);
                 
                 btnRadar.dibujar(window);
             }
-            // >>> MODO NOTAS <<<
+            // >>> MODO NOTAS (BITÁCORA) - DISEÑO MEJORADO <<<
             else if (modoNotas) {
+                // 1. Fondo Gradiente (Papel Viejo)
                 window.draw(fondoNotas); 
 
-                // Puntos guardados
+                // 2. Líneas de Cuaderno
+                for(const auto& linea : lineasCuaderno) {
+                    window.draw(linea);
+                }
+
+                // 3. Marcos Verdes en Unidades Aliadas (Propia flota)
+                for (const auto& barco : jugadorActual->getFlota()) {
+                    if (!barco.destruido) {
+                        sf::FloatRect b = barco.sprite.getGlobalBounds();
+                        sf::RectangleShape marco({b.size.x + 10.f, b.size.y + 10.f});
+                        marco.setOrigin({5.f, 5.f}); // Un poco más grande
+                        marco.setPosition({b.position.x, b.position.y});
+                        marco.setFillColor(sf::Color::Transparent);
+                        marco.setOutlineThickness(2.f);
+                        marco.setOutlineColor(sf::Color(0, 100, 0, 200)); // Verde oscuro militar
+                        window.draw(marco);
+                    }
+                }
+
+                // 4. Puntos Rojos (Memoria Radar)
                 for (const auto& pos : jugadorActual->memoriaRadar) {
                     sf::CircleShape punto(6.f);
                     punto.setOrigin({6.f, 6.f});
                     punto.setPosition(pos);
-                    punto.setFillColor(sf::Color(180, 0, 0, 150)); 
+                    punto.setFillColor(sf::Color(180, 0, 0, 200)); // Rojo tinta vieja
                     window.draw(punto);
                 }
 
-                // Cruces de barcos destruidos
+                // 5. Cruces de Bajas Confirmadas
                 if (jugadorEnemigo) {
                     for (const auto& barco : jugadorEnemigo->getFlota()) {
                         if (barco.destruido) {
@@ -524,13 +547,13 @@ int main() {
                             sf::RectangleShape linea1({60.f, 8.f});
                             linea1.setOrigin({30.f, 4.f});
                             linea1.setPosition(centro);
-                            linea1.setFillColor(sf::Color::Red);
+                            linea1.setFillColor(sf::Color(139, 0, 0, 220)); // Rojo sangre oscuro
                             linea1.setRotation(sf::degrees(45));
 
                             sf::RectangleShape linea2({60.f, 8.f});
                             linea2.setOrigin({30.f, 4.f});
                             linea2.setPosition(centro);
-                            linea2.setFillColor(sf::Color::Red);
+                            linea2.setFillColor(sf::Color(139, 0, 0, 220));
                             linea2.setRotation(sf::degrees(-45));
 
                             window.draw(linea1);
@@ -539,10 +562,17 @@ int main() {
                     }
                 }
 
-                txtInfo.setString("-- BITACORA TACTICA --");
-                txtInfo.setFillColor(sf::Color::Black);
-                txtInfo.setPosition({350.f, 30.f});
+                // UI Notas
+                txtInfo.setString("BITACORA DE CAPITAN - REPORTE TACTICO");
+                txtInfo.setFillColor(sf::Color(60, 40, 20)); // Café tinta
+                txtInfo.setPosition({300.f, 30.f});
                 window.draw(txtInfo);
+
+                txtInfo.setString("Puntos: Ultimo Escaneo | Marcos Verdes: Aliados | Cruces: Bajas");
+                txtInfo.setCharacterSize(16);
+                txtInfo.setPosition({250.f, 60.f});
+                window.draw(txtInfo);
+                txtInfo.setCharacterSize(20); 
 
                 btnNotas.dibujar(window);
             }
@@ -588,6 +618,7 @@ int main() {
                     IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
                 }
 
+                // Render UAV
                 if (lanzandoUAV) {
                     if (uavTimer.getElapsedTime().asMilliseconds() <= 500) {
                         txtInfo.setString("PREPARANDO DESPEGUE...");
@@ -621,6 +652,7 @@ int main() {
                     window.draw(txtInfo);
                 }
 
+                // Botones
                 if (!apuntando && !cargandoDisparo && !lanzandoUAV && !lanzandoUAVRefuerzo) {
                     btnRadar.dibujar(window);
                     btnNotas.dibujar(window); 
