@@ -126,25 +126,32 @@ int main() {
     sf::Color papelClaro(245, 235, 200); // Amarillo Hueso (Centro)
     sf::Color papelOscuro(100, 70, 40);  // Café Oscuro (Bordes)
 
-    // Usamos TriangleFan para simular gradiente radial
     sf::VertexArray fondoNotas(sf::PrimitiveType::TriangleFan, 6);
-    // Centro
     fondoNotas[0] = sf::Vertex{radarCenter, papelClaro};
-    // Esquinas (orden manecillas reloj + cierre)
     fondoNotas[1] = sf::Vertex{{0.f, 0.f}, papelOscuro};
     fondoNotas[2] = sf::Vertex{{(float)WINDOW_SIZE.x, 0.f}, papelOscuro};
     fondoNotas[3] = sf::Vertex{{(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y}, papelOscuro};
     fondoNotas[4] = sf::Vertex{{0.f, (float)WINDOW_SIZE.y}, papelOscuro};
-    fondoNotas[5] = sf::Vertex{{0.f, 0.f}, papelOscuro}; // Cerrar loop
+    fondoNotas[5] = sf::Vertex{{0.f, 0.f}, papelOscuro}; 
 
     // 3. Líneas de Cuaderno
     std::vector<sf::RectangleShape> lineasCuaderno;
     for(float y = 80.f; y < WINDOW_SIZE.y; y += 40.f) {
         sf::RectangleShape linea({(float)WINDOW_SIZE.x, 1.f});
         linea.setPosition({0.f, y});
-        linea.setFillColor(sf::Color(0, 0, 0, 40)); // Negro transparente
+        linea.setFillColor(sf::Color(0, 0, 0, 40)); 
         lineasCuaderno.push_back(linea);
     }
+
+    // 4. Flecha de Regreso (Estética nueva para el botón)
+    sf::RectangleShape flechaPalo({25.f, 6.f});
+    flechaPalo.setFillColor(sf::Color::Black);
+    flechaPalo.setOrigin({0.f, 3.f});
+    
+    sf::CircleShape flechaPunta(10.f, 3); // Triángulo
+    flechaPunta.setFillColor(sf::Color::Black);
+    flechaPunta.setOrigin({10.f, 10.f});
+    flechaPunta.setRotation(sf::degrees(-90)); // Apuntar a la izquierda
     // ==========================================
 
     EstadoJuego estado = MENSAJE_P1;
@@ -208,7 +215,7 @@ int main() {
                     if (siguienteJugador->radarRefuerzoPendiente) {
                         lanzandoUAVRefuerzo = true;
                         siguienteJugador->radarRefuerzoPendiente = false; 
-                        siguienteJugador->cooldownRadar = 2; // Regla: Enfriamiento desde llegada
+                        siguienteJugador->cooldownRadar = 2; 
                         
                         sf::Vector2f posInicio = { (float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y + 100.f };
                         if (uavLoaded) {
@@ -519,22 +526,37 @@ int main() {
                     if (!barco.destruido) {
                         sf::FloatRect b = barco.sprite.getGlobalBounds();
                         sf::RectangleShape marco({b.size.x + 10.f, b.size.y + 10.f});
-                        marco.setOrigin({5.f, 5.f}); // Un poco más grande
+                        marco.setOrigin({5.f, 5.f}); 
                         marco.setPosition({b.position.x, b.position.y});
                         marco.setFillColor(sf::Color::Transparent);
                         marco.setOutlineThickness(2.f);
-                        marco.setOutlineColor(sf::Color(0, 100, 0, 200)); // Verde oscuro militar
+                        marco.setOutlineColor(sf::Color(0, 100, 0, 200)); 
                         window.draw(marco);
                     }
                 }
 
-                // 4. Puntos Rojos (Memoria Radar)
+                // 4. Puntos Rojos Mejorados (Difuminado Grande)
                 for (const auto& pos : jugadorActual->memoriaRadar) {
-                    sf::CircleShape punto(6.f);
-                    punto.setOrigin({6.f, 6.f});
-                    punto.setPosition(pos);
-                    punto.setFillColor(sf::Color(180, 0, 0, 200)); // Rojo tinta vieja
-                    window.draw(punto);
+                    // Capa 1: Difuminado muy grande y transparente
+                    sf::CircleShape mancha1(20.f); 
+                    mancha1.setOrigin({20.f, 20.f});
+                    mancha1.setPosition(pos);
+                    mancha1.setFillColor(sf::Color(180, 0, 0, 30)); 
+                    window.draw(mancha1);
+
+                    // Capa 2: Difuminado medio
+                    sf::CircleShape mancha2(12.f);
+                    mancha2.setOrigin({12.f, 12.f});
+                    mancha2.setPosition(pos);
+                    mancha2.setFillColor(sf::Color(180, 0, 0, 80));
+                    window.draw(mancha2);
+
+                    // Capa 3: Centro sólido
+                    sf::CircleShape nucleo(7.f);
+                    nucleo.setOrigin({7.f, 7.f});
+                    nucleo.setPosition(pos);
+                    nucleo.setFillColor(sf::Color(160, 0, 0, 255)); 
+                    window.draw(nucleo);
                 }
 
                 // 5. Cruces de Bajas Confirmadas
@@ -547,7 +569,7 @@ int main() {
                             sf::RectangleShape linea1({60.f, 8.f});
                             linea1.setOrigin({30.f, 4.f});
                             linea1.setPosition(centro);
-                            linea1.setFillColor(sf::Color(139, 0, 0, 220)); // Rojo sangre oscuro
+                            linea1.setFillColor(sf::Color(139, 0, 0, 220)); 
                             linea1.setRotation(sf::degrees(45));
 
                             sf::RectangleShape linea2({60.f, 8.f});
@@ -564,17 +586,22 @@ int main() {
 
                 // UI Notas
                 txtInfo.setString("BITACORA DE CAPITAN - REPORTE TACTICO");
-                txtInfo.setFillColor(sf::Color(60, 40, 20)); // Café tinta
+                txtInfo.setFillColor(sf::Color(60, 40, 20)); 
                 txtInfo.setPosition({300.f, 30.f});
                 window.draw(txtInfo);
 
-                txtInfo.setString("Puntos: Ultimo Escaneo | Marcos Verdes: Aliados | Cruces: Bajas");
-                txtInfo.setCharacterSize(16);
-                txtInfo.setPosition({250.f, 60.f});
-                window.draw(txtInfo);
-                txtInfo.setCharacterSize(20); 
-
                 btnNotas.dibujar(window);
+
+                // DIBUJAR FLECHA NEGRA DE SALIDA SOBRE EL BOTÓN BLANCO
+                sf::Rect<float> btnBounds = btnNotas.getBounds();
+                sf::Vector2f btnCenter = {btnBounds.position.x + btnBounds.size.x / 2.f, btnBounds.position.y + btnBounds.size.y / 2.f};
+                
+                // Ajustar posición de la flecha sobre el botón
+                flechaPalo.setPosition({btnCenter.x + 10.f, btnCenter.y}); // El palo un poco a la derecha
+                flechaPunta.setPosition({btnCenter.x - 15.f, btnCenter.y}); // La punta a la izquierda
+
+                window.draw(flechaPalo);
+                window.draw(flechaPunta);
             }
             // >>> MODO NORMAL <<<
             else {
