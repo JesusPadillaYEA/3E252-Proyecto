@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <string> 
+#include <SFML/Audio.hpp>
 
 #include "EstadoJuego.hpp"
 #include "Boton.hpp"
@@ -59,6 +60,69 @@ int main() {
         uavShapeFallback.setFillColor(sf::Color::Cyan);
         uavShapeFallback.setOrigin({5.f, 5.f});
     }
+
+    // ... (Después de cargar texturas y fuentes) ...
+
+    // --- MUSICA DE FONDO ---
+    sf::Music musicaFondo;
+    // Intentar cargar el audio. Si falla, solo muestra error en consola pero el juego sigue.
+    if (!musicaFondo.openFromFile("assets/music/main.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/music/main.ogg" << std::endl;
+    } else {
+        musicaFondo.setLooping(true); // Repetir en bucle
+        musicaFondo.setVolume(50.f);  // Volumen inicial al 50%
+        musicaFondo.play();
+    }
+
+    // --- MENU DE PAUSA / VOLUMEN ---
+    bool juegoPausado = false;
+    float volumenActual = 50.f;
+
+    // Fondo semitransparente oscuro
+    sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
+    fondoMenu.setFillColor(sf::Color(0, 0, 0, 150)); 
+
+    // Caja del menú
+    sf::RectangleShape cajaMenu({400.f, 200.f});
+    cajaMenu.setOrigin({200.f, 100.f});
+    cajaMenu.setPosition({(float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f});
+    cajaMenu.setFillColor(sf::Color(50, 50, 60));
+    cajaMenu.setOutlineThickness(2.f);
+    cajaMenu.setOutlineColor(sf::Color::White);
+
+    // Texto de Título del Menú
+    sf::Text txtMenuTitulo(font);
+    txtMenuTitulo.setString("MENU DE PAUSA");
+    txtMenuTitulo.setCharacterSize(30);
+    txtMenuTitulo.setFillColor(sf::Color::White);
+    sf::FloatRect titleBounds = txtMenuTitulo.getLocalBounds();
+    txtMenuTitulo.setOrigin({titleBounds.size.x / 2.f, titleBounds.size.y / 2.f});
+    txtMenuTitulo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 50.f});
+
+    // Texto de Volumen
+    sf::Text txtVolumen(font);
+    txtVolumen.setCharacterSize(20);
+    txtVolumen.setFillColor(sf::Color::Yellow);
+    // (La posición y el string se actualizarán en el bucle)
+
+    // Barra de volumen (fondo y relleno)
+    sf::RectangleShape barraVolumenFondo({200.f, 20.f});
+    barraVolumenFondo.setOrigin({100.f, 10.f});
+    barraVolumenFondo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 20.f});
+    barraVolumenFondo.setFillColor(sf::Color(20, 20, 20));
+
+    sf::RectangleShape barraVolumenRelleno({200.f, 20.f}); // El ancho cambiará dinámicamente
+    barraVolumenRelleno.setOrigin({0.f, 10.f}); // Origen a la izquierda para crecer
+    barraVolumenRelleno.setPosition({cajaMenu.getPosition().x - 100.f, cajaMenu.getPosition().y + 20.f});
+    barraVolumenRelleno.setFillColor(sf::Color(0, 255, 0));
+
+    sf::Text txtInstruccionesVol(font);
+    txtInstruccionesVol.setString("Usa flechas IZQ / DER para ajustar\nPresiona ESC para volver");
+    txtInstruccionesVol.setCharacterSize(14);
+    txtInstruccionesVol.setFillColor(sf::Color(200, 200, 200));
+    sf::FloatRect instBounds = txtInstruccionesVol.getLocalBounds();
+    txtInstruccionesVol.setOrigin({instBounds.size.x / 2.f, instBounds.size.y / 2.f});
+    txtInstruccionesVol.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 70.f});
 
     // --- JUGADORES ---
     Jugador p1(1, {0.f, 0.f});
@@ -215,6 +279,40 @@ int main() {
 
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
+            // --- CONTROL DEL MENU ---
+            if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
+                if (k->code == sf::Keyboard::Key::Escape) {
+                    // Si hay una acción en curso (apuntando, moviendo, etc), cancelar eso primero
+                    if (cargandoDisparo || apuntando || moviendo || sel != -1 || modoRadar || modoNotas) {
+                        cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
+                        modoRadar = false; modoNotas = false;
+                        lanzandoUAV = false; lanzandoUAVRefuerzo = false;
+                        faseAtaqueAereo = 0;
+                        btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
+                    } 
+                    else {
+                        // Si no hay nada seleccionado, alternar menú
+                        juegoPausado = !juegoPausado;
+                    }
+                }
+
+                // Si el menú está abierto, controlar volumen
+                if (juegoPausado) {
+                    if (k->code == sf::Keyboard::Key::Right || k->code == sf::Keyboard::Key::Up) {
+                        volumenActual += 5.f;
+                        if (volumenActual > 100.f) volumenActual = 100.f;
+                        musicaFondo.setVolume(volumenActual);
+                    }
+                    else if (k->code == sf::Keyboard::Key::Left || k->code == sf::Keyboard::Key::Down) {
+                        volumenActual -= 5.f;
+                        if (volumenActual < 0.f) volumenActual = 0.f;
+                        musicaFondo.setVolume(volumenActual);
+                    }
+                }
+            }
+
+            // SI EL JUEGO ESTA PAUSADO, IGNORAR RESTO DE INPUTS (CLICKS)
+            if (juegoPausado) continue;
 
             if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
@@ -744,6 +842,28 @@ int main() {
                     btnNotas.dibujar(window); 
                 }
             }
+        }
+
+        // --- DIBUJAR MENU SUPERPUESTO (Siempre al final) ---
+        if (juegoPausado) {
+            window.draw(fondoMenu);
+            window.draw(cajaMenu);
+            window.draw(txtMenuTitulo);
+            window.draw(barraVolumenFondo);
+            
+            // Actualizar barra visual
+            float anchoBarra = (volumenActual / 100.f) * 200.f;
+            barraVolumenRelleno.setSize({anchoBarra, 20.f});
+            window.draw(barraVolumenRelleno);
+
+            // Actualizar texto porcentaje
+            txtVolumen.setString("Volumen: " + std::to_string((int)volumenActual) + "%");
+            sf::FloatRect volBounds = txtVolumen.getLocalBounds();
+            txtVolumen.setOrigin({volBounds.size.x / 2.f, volBounds.size.y / 2.f});
+            txtVolumen.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 10.f});
+            window.draw(txtVolumen);
+            
+            window.draw(txtInstruccionesVol);
         }
 
         window.display();
