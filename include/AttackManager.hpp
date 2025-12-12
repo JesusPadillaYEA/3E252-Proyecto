@@ -8,33 +8,28 @@
 
 namespace AttackManager {
 
-    // Procesamos el disparo y guardamos la pista
-    inline bool procesarDisparo(sf::Vector2f posicionClick, 
-                                sf::Vector2f origenDisparo, // Coordenada REAL del barco atacante
-                                Jugador& enemigo, 
-                                sf::Vector2u windowSize) {
+    inline bool procesarDisparo(sf::Vector2f posicionImpacto, 
+                                sf::Vector2f origenDisparo, 
+                                Jugador& enemigo) {
         
-        // 1. Calcular dónde cae el disparo en el mundo del enemigo (Inversión)
-        sf::Vector2f posImpactoReal;
-        posImpactoReal.x = (float)windowSize.x - posicionClick.x;
-        posImpactoReal.y = (float)windowSize.y - posicionClick.y;
+        // 1. GENERAR PISTA VISUAL
+        // Guardamos el origen real para que el IndicatorManager dibuje la flecha
+        IndicatorManager::agregarPista(enemigo, origenDisparo, posicionImpacto);
 
-        // 2. Guardar Pista: Guardamos el origen REAL. 
-        // El IndicatorManager se encargará de invertirlo visualmente.
-        IndicatorManager::agregarPista(enemigo, origenDisparo, posImpactoReal);
-
-        // 3. Daño
+        // 2. CÁLCULO DE IMPACTO (Coordenadas Globales)
+        // Ya no invertimos coordenadas. Si disparas a X=800, compruebas en X=800.
         auto& flota = enemigo.getFlota();
         for (auto& barco : flota) {
             if (barco.destruido) continue;
 
-            if (barco.sprite.getGlobalBounds().contains(posImpactoReal)) {
-                std::cout << ">>> IMPACTO EN: " << barco.nombre << std::endl;
+            if (barco.sprite.getGlobalBounds().contains(posicionImpacto)) {
+                std::cout << ">>> IMPACTO CONFIRMADO EN: " << barco.nombre << std::endl;
                 barco.recibirDano(9999); 
                 return true; 
             }
         }
-        std::cout << ">>> AGUA" << std::endl;
+
+        std::cout << ">>> AGUA en (" << posicionImpacto.x << ", " << posicionImpacto.y << ")" << std::endl;
         return false; 
     }
 }
