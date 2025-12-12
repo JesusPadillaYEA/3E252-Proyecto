@@ -19,6 +19,7 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Radar Tactico + UAV (SFML 3.0)");
     window.setFramerateLimit(60);
 
+    // --- RECURSOS ---
     sf::Font font;
     if (!font.openFromFile("assets/fonts/Ring.ttf")) return -1;
 
@@ -38,7 +39,7 @@ int main() {
     float offset[2] = {0.f, 0.f};
     fondo.setTextureRect(sf::IntRect({0, 0}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
 
-    // --- SPRITE DEL UAV (CORREGIDO) ---
+    // --- SPRITE DEL UAV ---
     sf::Sprite uavSprite(tUAV); 
     
     sf::CircleShape uavShapeFallback(5.f, 3);
@@ -127,10 +128,12 @@ int main() {
     // --- LÓGICA DE RADAR Y UAV ---
     bool modoRadar = false;
     bool lanzandoUAV = false;
+    bool lanzandoUAVRefuerzo = false; 
     float errorTimer = 0.f;
+    sf::String msgError = "";
+    
     sf::Clock uavTimer;
 
-    // Variables Disparo
     bool cargandoDisparo = false;
     float potenciaActual = 0.f;
     const float VELOCIDAD_CARGA = 5.0f;
@@ -166,11 +169,38 @@ int main() {
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
 
+            // >>> CAMBIO DE TURNO Y GESTIÓN DE REFUERZOS <<<
             if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
-                    estado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
+                    EstadoJuego siguienteEstado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
+                    Jugador* siguienteJugador = (siguienteEstado == TURNO_P1) ? &p1 : &p2;
+
+                    // 1. Resetear uso de radar por defecto
+                    siguienteJugador->radarUsadoEnTurno = false;
+
+                    // 2. Verificar si llegan refuerzos (UAV desde la base)
+                    if (siguienteJugador->radarRefuerzoPendiente) {
+                        lanzandoUAVRefuerzo = true;
+                        siguienteJugador->radarRefuerzoPendiente = false; 
+                        
+                        // >>> REGLA NUEVA: Si el refuerzo llega, cuenta como el uso del turno <<<
+                        siguienteJugador->radarUsadoEnTurno = true; 
+                        
+                        // Configurar posición inicial (Centro inferior)
+                        sf::Vector2f posInicio = { (float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y + 100.f };
+                        if (uavLoaded) {
+                            uavSprite.setPosition(posInicio);
+                            uavSprite.setRotation(sf::degrees(0));
+                            uavSprite.setScale({0.15f, 0.15f});
+                        } else {
+                            uavShapeFallback.setPosition(posInicio);
+                        }
+                    }
+
+                    estado = siguienteEstado;
                     sel = -1; moviendo = false; apuntando = false; cargandoDisparo = false;
-                    modoRadar = false; lanzandoUAV = false; errorTimer = 0.f;
+                    modoRadar = false; lanzandoUAV = false; 
+                    errorTimer = 0.f;
                     btnMover.resetColor(); btnAtacar.resetColor(); btnRadar.resetColor();
                 }
                 continue;
@@ -178,7 +208,7 @@ int main() {
 
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
-            if (lanzandoUAV) continue;
+            if (lanzandoUAV || lanzandoUAVRefuerzo) continue;
 
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
@@ -187,37 +217,49 @@ int main() {
                     if (!apuntando && !cargandoDisparo && jugadorActual) {
                         if (btnRadar.esClickeado(mousePos)) {
                             if (!modoRadar) {
-                                // BUSCAR PORTAVIONES
-                                bool carrierFound = false;
-                                sf::Vector2f posInicio;
-                                
-                                for (const auto& barco : jugadorActual->getFlota()) {
-                                    if (barco.nombre.find("Portaviones") != std::string::npos && !barco.destruido) {
-                                        // Calcular centro del barco dinámicamente
-                                        sf::FloatRect b = barco.sprite.getGlobalBounds();
-                                        posInicio = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
-                                        carrierFound = true;
-                                        break;
-                                    }
+                                // REGLA 1: Solo una vez por turno (Incluye si acaba de llegar refuerzo)
+                                if (jugadorActual->radarUsadoEnTurno) {
+                                    msgError = "SISTEMA ENFRIANDOSE. ESPERA AL SIGUIENTE TURNO.";
+                                    errorTimer = 2.0f;
                                 }
-                                
-                                if (carrierFound) {
-                                    if (uavLoaded) {
-                                        uavSprite.setPosition(posInicio);
-                                        uavSprite.setRotation(sf::degrees(0));
-                                        uavSprite.setScale({0.05f, 0.05f}); 
-                                    } else {
-                                        uavShapeFallback.setPosition(posInicio);
+                                else {
+                                    // REGLA 2: Buscar Portaviones
+                                    bool carrierFound = false;
+                                    sf::Vector2f posInicio;
+                                    
+                                    for (const auto& barco : jugadorActual->getFlota()) {
+                                        if (barco.nombre.find("Portaviones") != std::string::npos && !barco.destruido) {
+                                            sf::FloatRect b = barco.sprite.getGlobalBounds();
+                                            posInicio = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
+                                            carrierFound = true;
+                                            break;
+                                        }
                                     }
                                     
-                                    lanzandoUAV = true;
-                                    uavTimer.restart();
-                                    
-                                    btnRadar.setColor(sf::Color::Red);
-                                    sel = -1; moviendo = false; 
-                                } else {
-                                    std::cout << ">>> ERROR: Portaviones no disponible." << std::endl;
-                                    errorTimer = 2.0f; 
+                                    if (carrierFound) {
+                                        // CASO A: Despegue Normal
+                                        if (uavLoaded) {
+                                            uavSprite.setPosition(posInicio);
+                                            uavSprite.setRotation(sf::degrees(0));
+                                            uavSprite.setScale({0.05f, 0.05f}); 
+                                        } else {
+                                            uavShapeFallback.setPosition(posInicio);
+                                        }
+                                        lanzandoUAV = true;
+                                        uavTimer.restart();
+                                        jugadorActual->radarUsadoEnTurno = true; // Gastar uso
+                                        
+                                        btnRadar.setColor(sf::Color::Red);
+                                        sel = -1; moviendo = false; 
+                                    } 
+                                    else {
+                                        // CASO B: Solicitar Refuerzo para el SIGUIENTE turno
+                                        jugadorActual->radarRefuerzoPendiente = true;
+                                        jugadorActual->radarUsadoEnTurno = true; // Gastar la acción de pedir
+                                        
+                                        msgError = "PORTAVIONES CAIDO. REFUERZOS LLEGAN EL PROXIMO TURNO.";
+                                        errorTimer = 3.0f;
+                                    }
                                 }
                             } 
                             else {
@@ -276,7 +318,6 @@ int main() {
                         cargandoDisparo = false;
                         sf::Vector2f diff = mousePos - origenDisparoReal;
                         float angulo = std::atan2(diff.y, diff.x);
-                        
                         sf::Vector2f impacto;
                         impacto.x = origenDisparoReal.x + std::cos(angulo) * potenciaActual;
                         impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
@@ -295,7 +336,7 @@ int main() {
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
                     cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
-                    modoRadar = false; lanzandoUAV = false;
+                    modoRadar = false; lanzandoUAV = false; lanzandoUAVRefuerzo = false;
                     btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor();
                 }
             }
@@ -303,26 +344,45 @@ int main() {
 
         // --- UPDATE ---
         
+        // A. Animación Portaviones
         if (lanzandoUAV) {
             if (uavTimer.getElapsedTime().asMilliseconds() > 500) {
                 if (uavLoaded) {
                     uavSprite.move({0.f, -3.0f}); 
-                    
                     sf::Vector2f scale = uavSprite.getScale();
                     if (scale.x < 0.15f) { 
                         uavSprite.setScale({scale.x + 0.0005f, scale.y + 0.0005f});
                     }
-
                     if (uavSprite.getPosition().y < -50.f) {
                         lanzandoUAV = false;
                         modoRadar = true;
+                        btnRadar.setColor(sf::Color::Red);
                     }
                 } else {
                     uavShapeFallback.move({0.f, -3.0f});
                     if (uavShapeFallback.getPosition().y < -50.f) {
                         lanzandoUAV = false;
                         modoRadar = true;
+                        btnRadar.setColor(sf::Color::Red);
                     }
+                }
+            }
+        }
+        // B. Animación Refuerzo (Desde Abajo)
+        else if (lanzandoUAVRefuerzo) {
+            if (uavLoaded) {
+                uavSprite.move({0.f, -5.0f}); 
+                if (uavSprite.getPosition().y < -50.f) {
+                    lanzandoUAVRefuerzo = false;
+                    modoRadar = true;
+                    btnRadar.setColor(sf::Color::Red);
+                }
+            } else {
+                uavShapeFallback.move({0.f, -5.0f});
+                if (uavShapeFallback.getPosition().y < -50.f) {
+                    lanzandoUAVRefuerzo = false;
+                    modoRadar = true;
+                    btnRadar.setColor(sf::Color::Red);
                 }
             }
         }
@@ -462,7 +522,7 @@ int main() {
                         window.draw(txtInfo);
                     }
 
-                    if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo && !lanzandoUAV) {
+                    if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo && !lanzandoUAV && !lanzandoUAVRefuerzo) {
                         btnAtacar.dibujar(window);
                         btnMover.dibujar(window);
                     }
@@ -474,7 +534,7 @@ int main() {
                     IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
                 }
 
-                // >>> DIBUJAR UAV (Miniatura) <<<
+                // >>> DIBUJAR UAV (Normal) <<<
                 if (lanzandoUAV) {
                     if (uavTimer.getElapsedTime().asMilliseconds() <= 500) {
                         txtInfo.setString("PREPARANDO DESPEGUE...");
@@ -494,14 +554,26 @@ int main() {
                     else window.draw(uavShapeFallback);
                 }
 
+                // >>> DIBUJAR UAV (Refuerzo) <<<
+                if (lanzandoUAVRefuerzo) {
+                    txtInfo.setString("REFUERZOS LLEGANDO...");
+                    txtInfo.setFillColor(sf::Color::Green);
+                    sf::Vector2f pos = uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
+                    txtInfo.setPosition({pos.x + 20.f, pos.y});
+                    window.draw(txtInfo);
+
+                    if (uavLoaded) window.draw(uavSprite);
+                    else window.draw(uavShapeFallback);
+                }
+
                 if (errorTimer > 0.f) {
-                    txtInfo.setString("! ERROR: NECESITAS UN PORTAVIONES OPERATIVO !");
+                    txtInfo.setString(msgError);
                     txtInfo.setFillColor(sf::Color::Red);
-                    txtInfo.setPosition({300.f, 300.f});
+                    txtInfo.setPosition({150.f, 300.f});
                     window.draw(txtInfo);
                 }
 
-                if (!apuntando && !cargandoDisparo && !lanzandoUAV) {
+                if (!apuntando && !cargandoDisparo && !lanzandoUAV && !lanzandoUAVRefuerzo) {
                     btnRadar.dibujar(window);
                 }
             }
