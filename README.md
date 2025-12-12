@@ -10,6 +10,7 @@ Juego de estrategia donde dos jugadores deben aniquilar la flota del otro, vario
 Lista los controles:
 
 - Flechas: Movimiento (unidades de combate) / movimiento de configuración (música y sonido)
+- esc: menu de volumenes 
 - Mouse: Seleccionar / disparar
 
 ### ⚙️ Mecánicas
