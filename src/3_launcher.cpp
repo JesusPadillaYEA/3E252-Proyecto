@@ -81,9 +81,6 @@ int main() {
     instrucciones.setString("Haz clic en el boton para comenzar\nO presiona ENTER\n\nPresiona ESC para salir");
     instrucciones.setPosition(250, 550);
     
-    // Variable para controlar si el botón está presionado
-    bool botonPresionado = false;
-    
     std::cout << "Launcher iniciado. Reproduciendo música..." << std::endl;
     
     // Loop principal del launcher
