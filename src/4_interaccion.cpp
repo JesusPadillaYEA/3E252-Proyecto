@@ -15,8 +15,9 @@
 #include "IndicatorManager.hpp"
 
 int main() {
+    // SFML 3.0: Vector2u se inicializa con {}
     const sf::Vector2u WINDOW_SIZE(1000, 700);
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Radar Dinamico (SFML 3.0)");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Radar Tactico (SFML 3.0)");
     window.setFramerateLimit(60);
 
     // --- RECURSOS ---
@@ -48,12 +49,13 @@ int main() {
     sf::FloatRect zonaDerecha({500.f, 0.f}, {500.f, 700.f});
 
     // --- UI ---
+    // SFML 3.0: Colores explícitos
     Boton btnAtacar(font, "ATACAR", {200, 50, 50});
     Boton btnMover(font, "MOVER", {50, 150, 50});
     
-    // CORRECCIÓN: Inicializamos con un color gris oscuro y luego ponemos la posición
-    Boton btnRadar(font, "RADAR", sf::Color(80, 80, 80)); 
-    btnRadar.setPosition({850.f, 20.f}); // <--- Aquí asignamos la coordenada X=850
+    // CORRECCIÓN PREVIA: Inicializamos con Color gris y luego seteamos posición
+    Boton btnRadar(font, "RADAR", sf::Color(60, 70, 80)); 
+    btnRadar.setPosition({850.f, 20.f}); 
 
     sf::Text txtInfo(font);
     txtInfo.setCharacterSize(20);
@@ -61,12 +63,63 @@ int main() {
     txtInfo.setFillColor(sf::Color::Yellow);
     txtInfo.setPosition({350.f, 20.f});
 
+    // ==========================================
+    // >>> RECURSOS ESTÉTICOS DEL RADAR <<<
+    // ==========================================
+    const sf::Vector2f radarCenter((float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f);
+    const sf::Color neonGreen(0, 255, 100);
+    const sf::Color neonRed(255, 50, 50);
+
+    // 1. Fondo Gradiente (VertexArray)
+    // SFML 3.0: Inicialización de Vertex con llaves dobles {{pos}, color}
+    sf::VertexArray radarBg(sf::PrimitiveType::TriangleStrip, 4);
+    radarBg[0] = sf::Vertex{{0.f, 0.f}, sf::Color::Black};
+    radarBg[1] = sf::Vertex{{(float)WINDOW_SIZE.x, 0.f}, sf::Color::Black};
+    radarBg[2] = sf::Vertex{{0.f, (float)WINDOW_SIZE.y}, sf::Color(10, 25, 40)}; // Gris azulado frío
+    radarBg[3] = sf::Vertex{{(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y}, sf::Color(10, 25, 40)};
+
+    // 2. Elementos HUD (Círculos y Líneas Estáticas)
+    std::vector<sf::CircleShape> radarCircles;
+    for (int i = 1; i <= 4; ++i) {
+        float r = i * 120.f;
+        sf::CircleShape c(r);
+        c.setOrigin({r, r}); // Centro geométrico
+        c.setPosition(radarCenter);
+        c.setFillColor(sf::Color::Transparent);
+        c.setOutlineThickness(1.f);
+        c.setOutlineColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 60)); // Muy transparente
+        radarCircles.push_back(c);
+    }
+    // Cruz central
+    sf::RectangleShape axisX({(float)WINDOW_SIZE.x, 1.f});
+    axisX.setPosition({0.f, radarCenter.y});
+    axisX.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
+    
+    sf::RectangleShape axisY({1.f, (float)WINDOW_SIZE.y});
+    axisY.setPosition({radarCenter.x, 0.f});
+    axisY.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
+
+    // 3. Línea de Barrido (Scanner)
+    float radarSweepAngle = 0.f;
+    // Línea principal nítida
+    float largoLinea = radarCircles.back().getRadius() + 100.f; // Que cubra todo
+    sf::RectangleShape sweepLine({largoLinea, 2.f});
+    sweepLine.setOrigin({0.f, 1.f}); 
+    sweepLine.setPosition(radarCenter);
+    sweepLine.setFillColor(neonGreen);
+    
+    // "Glow" de la línea (más ancha y transparente detrás)
+    sf::RectangleShape sweepGlow({largoLinea, 15.f}); // 15px de ancho para el brillo
+    sweepGlow.setOrigin({0.f, 7.5f});
+    sweepGlow.setPosition(radarCenter);
+    // Gradiente en el brillo sería ideal, pero color plano transparente funciona bien
+    sweepGlow.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
+    // ==========================================
+
     EstadoJuego estado = MENSAJE_P1;
     int sel = -1;
     bool moviendo = false;
     bool apuntando = false;
-    
-    // Estado del Radar
     bool modoRadar = false;
 
     // Variables Disparo
@@ -75,7 +128,7 @@ int main() {
     const float VELOCIDAD_CARGA = 5.0f;
     const float MAX_DISTANCIA = 1500.f;
 
-    // Variables de Estado Visual
+    // Lógica Visual
     bool enZonaEnemiga = false;
     sf::Vector2f origenDisparoReal(0,0); 
 
@@ -90,7 +143,6 @@ int main() {
             jugadorActual = &p2; jugadorEnemigo = &p1;
         }
 
-        // Determinar Zona Objetivo
         if (sel != -1 && jugadorActual) {
             float barcoX = jugadorActual->getFlota()[sel].sprite.getPosition().x;
             if (barcoX < 500.f) zonaObjetivo = &zonaDerecha;
@@ -102,7 +154,6 @@ int main() {
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
 
-            // CAMBIO DE TURNO
             if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
                     estado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
@@ -115,27 +166,25 @@ int main() {
 
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
-            // INPUT
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
                     
-                    // 1. Radar
+                    // --- RADAR TOGGLE ---
                     if (!apuntando && !cargandoDisparo && jugadorActual) {
                         if (btnRadar.esClickeado(mousePos)) {
                             modoRadar = !modoRadar; 
-                            
                             if (modoRadar) {
                                 btnRadar.setColor(sf::Color::Red);
-                                sel = -1; moviendo = false;
+                                sel = -1; moviendo = false; // Resetear selección al entrar en radar
                             } else {
                                 btnRadar.resetColor();
                             }
                         }
                     }
 
-                    if (modoRadar) continue;
+                    if (modoRadar) continue; // Si radar está activo, bloquear clicks en el juego
 
-                    // 2. Juego Normal
+                    // --- JUEGO NORMAL ---
                     if (apuntando && sel != -1) {
                         cargandoDisparo = true;
                         potenciaActual = 0.f;
@@ -176,12 +225,10 @@ int main() {
                 }
             }
 
-            // SOLTAR CLICK (Disparo)
             if (const auto* m = ev->getIf<sf::Event::MouseButtonReleased>()) {
                 if (m->button == sf::Mouse::Button::Left) {
                     if (cargandoDisparo && apuntando && sel != -1) {
                         cargandoDisparo = false;
-
                         sf::Vector2f diff = mousePos - origenDisparoReal;
                         float angulo = std::atan2(diff.y, diff.x);
                         
@@ -192,7 +239,6 @@ int main() {
                         if (jugadorEnemigo) {
                             AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
                         }
-                        
                         IndicatorManager::actualizarTurnos(*jugadorActual);
                         apuntando = false; sel = -1;
                         btnAtacar.resetColor();
@@ -211,10 +257,19 @@ int main() {
         }
 
         // --- UPDATE ---
-        offset[0] += 0.5f; offset[1] += 0.25f;
-        if (offset[0] >= (float)WINDOW_SIZE.x) offset[0] = 0; 
-        if (offset[1] >= (float)WINDOW_SIZE.y) offset[1] = 0;
-        fondo.setTextureRect(sf::IntRect({(int)offset[0], (int)offset[1]}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
+        if (!modoRadar) {
+            // Animar el agua solo si vemos el mapa normal
+            offset[0] += 0.5f; offset[1] += 0.25f;
+            if (offset[0] >= (float)WINDOW_SIZE.x) offset[0] = 0; 
+            if (offset[1] >= (float)WINDOW_SIZE.y) offset[1] = 0;
+            fondo.setTextureRect(sf::IntRect({(int)offset[0], (int)offset[1]}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
+        } else {
+            // Animar Radar
+            radarSweepAngle += 2.0f; // Velocidad de giro
+            if (radarSweepAngle >= 360.f) radarSweepAngle -= 360.f;
+            sweepLine.setRotation(sf::degrees(radarSweepAngle));
+            sweepGlow.setRotation(sf::degrees(radarSweepAngle));
+        }
 
         if (cargandoDisparo) {
             potenciaActual += VELOCIDAD_CARGA;
@@ -226,7 +281,6 @@ int main() {
             if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), sel, WINDOW_SIZE);
         }
 
-        // Posicionar Botones
         if (sel != -1 && jugadorActual && !jugadorActual->getFlota()[sel].destruido) {
              auto& barco = jugadorActual->getFlota()[sel];
              auto bounds = barco.sprite.getGlobalBounds();
@@ -236,7 +290,6 @@ int main() {
              btnMover.setPosition({p.x + 110.f, yBtn});
         }
 
-        // --- CÁLCULO VISUAL ---
         sf::Vector2f impactoVisual(0,0);
         if (apuntando && sel != -1 && jugadorActual) {
             auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
@@ -259,39 +312,72 @@ int main() {
 
         // --- DRAW ---
         window.clear();
-        window.draw(fondo);
 
-        // --- RENDERIZADO ---
         if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
+            window.draw(fondo); 
             UIManager::dibujarTooltipTurno(window, font, estado);
         }
         else if (jugadorActual) {
             
-            // >>> MODO RADAR <<<
+            // >>>>>>>>>>>>>>>>> RENDERIZADO DEL RADAR <<<<<<<<<<<<<<<<<
             if (modoRadar && jugadorEnemigo) {
-                txtInfo.setString("-- RADAR ACTIVO: DETECTANDO HOSTILES --");
-                txtInfo.setFillColor(sf::Color::Red);
-                txtInfo.setPosition({250.f, 20.f}); 
-                window.draw(txtInfo);
+                // 1. Fondo Gradiente
+                window.draw(radarBg);
 
+                // 2. HUD (Círculos y Ejes)
+                window.draw(axisX);
+                window.draw(axisY);
+                for (const auto& circle : radarCircles) {
+                    window.draw(circle);
+                }
+
+                // 3. Enemigos (Blips Brillantes)
                 for (const auto& barco : jugadorEnemigo->getFlota()) {
                     if (!barco.destruido) {
-                        sf::CircleShape blip(8.f); 
-                        blip.setFillColor(sf::Color::Red);
-                        blip.setOutlineColor(sf::Color(255, 100, 100)); 
-                        blip.setOutlineThickness(2.f);
-                        
                         sf::FloatRect b = barco.sprite.getGlobalBounds();
-                        blip.setPosition({b.position.x + b.size.x/2.f - 8.f, b.position.y + b.size.y/2.f - 8.f});
-                        
-                        window.draw(blip);
+                        sf::Vector2f blipPos = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
+
+                        // Dibujar 3 capas de círculos para simular luz
+                        // Capa 3: Halo exterior (muy transparente)
+                        sf::CircleShape haloOut(15.f);
+                        haloOut.setOrigin({15.f, 15.f});
+                        haloOut.setPosition(blipPos);
+                        haloOut.setFillColor(sf::Color(neonRed.r, neonRed.g, neonRed.b, 50));
+                        window.draw(haloOut);
+
+                        // Capa 2: Halo interior
+                        sf::CircleShape haloIn(10.f);
+                        haloIn.setOrigin({10.f, 10.f});
+                        haloIn.setPosition(blipPos);
+                        haloIn.setFillColor(sf::Color(neonRed.r, neonRed.g, neonRed.b, 100));
+                        window.draw(haloIn);
+
+                        // Capa 1: Núcleo (Sólido)
+                        sf::CircleShape core(5.f);
+                        core.setOrigin({5.f, 5.f});
+                        core.setPosition(blipPos);
+                        core.setFillColor(neonRed);
+                        window.draw(core);
                     }
                 }
+
+                // 4. Línea de Escaneo (por encima de todo para efecto barrido)
+                window.draw(sweepGlow);
+                window.draw(sweepLine);
+
+                // UI Radar
+                txtInfo.setString("RADAR ACTIVO // BUSCANDO OBJETIVOS...");
+                txtInfo.setFillColor(neonGreen);
+                // Centrar texto (aprox)
+                txtInfo.setPosition({WINDOW_SIZE.x / 2.f - 180.f, 30.f}); 
+                window.draw(txtInfo);
                 
                 btnRadar.dibujar(window);
             }
-            // >>> MODO NORMAL <<<
+            // >>>>>>>>>>>>>>>>> RENDERIZADO NORMAL <<<<<<<<<<<<<<<<<
             else {
+                window.draw(fondo); 
+
                 if (enZonaEnemiga && apuntando) {
                     sf::RectangleShape overlay(sf::Vector2f((float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y));
                     overlay.setFillColor(sf::Color(255, 0, 0, 40)); 
