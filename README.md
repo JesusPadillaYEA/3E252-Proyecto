@@ -9,33 +9,35 @@ Juego de estrategia donde dos jugadores deben aniquilar la flota del otro, vario
 
 Lista los controles:
 
-- Flechas: Movimiento
-- Mouse: Seleccionar/Disparar
+- Flechas: Movimiento (unidades de combate) / movimiento de configuración (música y sonido)
+- Mouse: Seleccionar / disparar
 
 ### ⚙️ Mecánicas
 
-Explica las mecánicas principales de tu juego.
+- Turnos alternados entre jugadores
+- Colocación estratégica de unidades
+- Ataque según reglas definidas
+- Condición de victoria y derrota
 
 ### 🏆 Características
 
-- Feature 1
-- Feature 2
-- Feature 3
+- Modo de juego por turnos
+- Multijugador local
+- Gráficos 2D estilizados (estilo pixel art)
+- Sonido y música originales (IA)
 
 ### 👥 Equipo
 
-- **Líder**: Nombre Completo (@usuario-github)
-- **Integrante 2**: Nombre Completo (@usuario-github)
-- **Integrante 3**: Nombre Completo (@usuario-github)
+- **Líder**: Jesús David Padilla Castellanos (@JesusPadillaYEA-github)
+- **Integrante 2**: Joseph Emmanuel Torres Acosta (@JosephDevCETI-github)
 
 ### 🛠️ Tecnologías
 
-- Motor/Framework: Unity/Godot/Unreal/etc.
-- Lenguaje: C#/C++/Python/etc.
-- Librerías adicionales: ...
+- Motor/Framework: SFML.
+- Lenguaje: C++/CMake.
+- Librerías adicionales: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll, sfml-audio-3.dll, sfml-graphics-3.dll, sfml-system-3.dll, sfml-window-3.dll
 
 ### 📜 Créditos
 
-- Assets de terceros utilizados
-- Referencias o inspiraciones
-- Agradecimientos
+- Inspirado en el juego de mesa "Battleship" (Hasbro Gaming)
+- Tipografía: https://www.dafont.com/es/impacted.font
