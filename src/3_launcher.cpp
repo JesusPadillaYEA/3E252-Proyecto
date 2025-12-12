@@ -1,15 +1,28 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <iostream>
+#include <cstdlib> // Necesario para ejecutar comandos del sistema (system)
+
+// Función auxiliar para iniciar el juego y cerrar el launcher
+void iniciarJuego(sf::RenderWindow& window, sf::Music& musica) {
+    std::cout << "¡Iniciando juego..." << std::endl;
+    musica.stop();
+    window.close();
+
+    // Ejecuta el siguiente programa. 
+    // "start" en Windows permite que el launcher termine mientras el juego se abre.
+    // Si estás en Linux/Mac, quita "start " y usa "./4_interaccion"
+    std::system("start ./main.exe"); 
+}
 
 int main() {
     // Crear ventana del launcher
-    sf::RenderWindow window(sf::VideoMode(1000, 700), "Battleship - Launcher");
+    sf::RenderWindow window(sf::VideoMode({1000, 700}), "Battleship - Launcher");
     window.setFramerateLimit(60);
     
     // Cargar la fuente Ring.ttf
     sf::Font fontRing;
-    if (!fontRing.loadFromFile("assets/fonts/Ring.ttf")) {
+    if (!fontRing.openFromFile("assets/fonts/Ring.ttf")) {
         std::cerr << "Error al cargar la fuente Ring.ttf" << std::endl;
         return -1;
     }
@@ -20,7 +33,7 @@ int main() {
         std::cerr << "Error al cargar la música Aguas-de-Fuego.ogg" << std::endl;
     } else {
         musica.play();
-        musica.setLoop(true); // Repetir la música infinitamente
+        musica.setLooping(true); 
     }
     
     // Cargar la imagen de portada
@@ -29,100 +42,98 @@ int main() {
         std::cerr << "Error al cargar portada.jpg" << std::endl;
     }
     sf::Sprite portada(texturaPortada);
-    portada.setPosition(0, 0);
-    // Escalar la portada para que ocupe el área azul claro (1000x350)
-    portada.setScale(
-        1000.0f / texturaPortada.getSize().x,
-        350.0f / texturaPortada.getSize().y
-    );
+    portada.setPosition({0.f, 0.f});
+    
+    // Escalar la portada para que ocupe el área superior (1000x350)
+    // Nota: SFML 3 usa vectores para setScale ({x, y})
+    sf::Vector2u texSize = texturaPortada.getSize();
+    portada.setScale({
+        1000.0f / (float)texSize.x,
+        350.0f / (float)texSize.y
+    });
     
     // ============ CREAR ELEMENTOS DEL LAUNCHER ============
     
     // Crear botón "Iniciar Juego"
-    sf::RectangleShape boton(sf::Vector2f(300, 80));
+    sf::RectangleShape boton({300.f, 80.f});
     boton.setFillColor(sf::Color(220, 20, 60)); // Rojo carmesí
-    boton.setPosition((window.getSize().x - 300) / 2, 400);
-    boton.setOutlineThickness(3);
+    boton.setPosition({(window.getSize().x - 300.f) / 2.f, 400.f});
+    boton.setOutlineThickness(3.f);
     boton.setOutlineColor(sf::Color::White);
     
     // Texto del botón
-    sf::Text textoBoton;
-    textoBoton.setFont(fontRing);
+    sf::Text textoBoton(fontRing); // Constructor directo en SFML 3
     textoBoton.setCharacterSize(40);
     textoBoton.setFillColor(sf::Color::White);
     textoBoton.setString("INICIAR JUEGO");
     
     // Centrar texto en el botón
     sf::FloatRect botonBounds = textoBoton.getLocalBounds();
-    textoBoton.setPosition(
-        boton.getPosition().x + (boton.getSize().x - botonBounds.width) / 2,
-        boton.getPosition().y + (boton.getSize().y - botonBounds.height) / 2 - 10
-    );
+    sf::Vector2f posBoton = boton.getPosition();
+    sf::Vector2f sizeBoton = boton.getSize();
+    
+    textoBoton.setPosition({
+        posBoton.x + (sizeBoton.x - botonBounds.size.x) / 2.f,
+        posBoton.y + (sizeBoton.y - botonBounds.size.y) / 2.f - 10.f
+    });
     
     // Subtítulo
-    sf::Text subtitulo;
-    subtitulo.setFont(fontRing);
+    sf::Text subtitulo(fontRing);
     subtitulo.setCharacterSize(24);
     subtitulo.setFillColor(sf::Color(150, 0, 20));
     subtitulo.setString("PREPARATE PARA LA BATALLA NAVAL");
     subtitulo.setStyle(sf::Text::Bold);
 
     sf::FloatRect subtituloBounds = subtitulo.getLocalBounds();
-    subtitulo.setPosition(
-        (window.getSize().x - subtituloBounds.width) / 2,
-        210
-    );
+    subtitulo.setPosition({
+        (window.getSize().x - subtituloBounds.size.x) / 2.f,
+        210.f
+    });
     
     // Texto de instrucciones
-    sf::Text instrucciones;
-    instrucciones.setFont(fontRing);
+    sf::Text instrucciones(fontRing);
     instrucciones.setCharacterSize(16);
     instrucciones.setFillColor(sf::Color(200, 200, 200));
     instrucciones.setString("Haz clic en el boton para comenzar\nO presiona ENTER\n\nPresiona ESC para salir");
-    instrucciones.setPosition(250, 550);
-    
-    // Variable para controlar si el botón está presionado
-    bool botonPresionado = false;
+    instrucciones.setPosition({250.f, 550.f});
     
     std::cout << "Launcher iniciado. Reproduciendo música..." << std::endl;
     
-    // Loop principal del launcher
+    // Loop principal
     while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
+        // --- SFML 3.0 EVENT POLLING ---
+        while (const auto event = window.pollEvent()) {
+            if (event->is<sf::Event::Closed>()) {
                 window.close();
             }
             
-            // Cerrar con ESC
-            if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::Escape) {
+            // Teclado
+            if (const auto* keyEvent = event->getIf<sf::Event::KeyPressed>()) {
+                if (keyEvent->code == sf::Keyboard::Key::Escape) {
                     window.close();
                 }
-                // Iniciar juego con ENTER
-                if (event.key.code == sf::Keyboard::Return) {
-                    std::cout << "¡Iniciando juego!" << std::endl;
-                    window.close();
+                if (keyEvent->code == sf::Keyboard::Key::Enter) {
+                    iniciarJuego(window, musica);
+                    return 0; // Terminar launcher
                 }
             }
             
-            // Detectar clic en el botón
-            if (event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-                sf::Vector2f mousePosf(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-                
-                if (boton.getGlobalBounds().contains(mousePosf)) {
-                    std::cout << "¡Iniciando juego!" << std::endl;
-                    window.close();
+            // Mouse Click
+            if (const auto* mouseEvent = event->getIf<sf::Event::MouseButtonPressed>()) {
+                if (mouseEvent->button == sf::Mouse::Button::Left) {
+                    sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                    if (boton.getGlobalBounds().contains(mousePos)) {
+                        iniciarJuego(window, musica);
+                        return 0; // Terminar launcher
+                    }
                 }
             }
         }
         
-        // Efecto visual: cambiar color del botón cuando el ratón está encima
-        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        sf::Vector2f mousePosf(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
+        // Efecto visual: Hover sobre el botón
+        sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
         
-        if (boton.getGlobalBounds().contains(mousePosf)) {
+        if (boton.getGlobalBounds().contains(mousePos)) {
             boton.setFillColor(sf::Color(255, 69, 0)); // Naranja más brillante
             textoBoton.setFillColor(sf::Color::Yellow);
         } else {
@@ -130,31 +141,23 @@ int main() {
             textoBoton.setFillColor(sf::Color::White);
         }
         
-        // Limpiar ventana con color de fondo (azul océano oscuro)
-        window.clear(sf::Color(25, 50, 100));
+        // Renderizado
+        window.clear(sf::Color(25, 50, 100)); // Fondo azul oscuro
         
-        // Dibujar la portada en el área superior
         window.draw(portada);
         
-        // Dibujar fondo oscuro en la parte inferior
-        sf::RectangleShape fondo2(sf::Vector2f(1000, 350));
+        sf::RectangleShape fondo2({1000.f, 350.f});
         fondo2.setFillColor(sf::Color(25, 50, 100));
-        fondo2.setPosition(0, 350);
+        fondo2.setPosition({0.f, 350.f});
         window.draw(fondo2);
         
-        // Dibujar elementos
         window.draw(subtitulo);
         window.draw(boton);
         window.draw(textoBoton);
         window.draw(instrucciones);
         
-        // Mostrar ventana
         window.display();
     }
-    
-    // Detener la música al cerrar
-    musica.stop();
-    std::cout << "Launcher cerrado." << std::endl;
     
     return 0;
 }
