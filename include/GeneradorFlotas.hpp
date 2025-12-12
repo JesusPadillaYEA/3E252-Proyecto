@@ -6,7 +6,6 @@
 
 namespace GeneradorFlotas {
 
-    // Función para poblar el grid de un jugador
     inline void inicializarFlota(Jugador& jugador, 
                                  const sf::Texture& tDestructor, 
                                  const sf::Texture& tPortaviones,
@@ -15,39 +14,40 @@ namespace GeneradorFlotas {
         sf::Vector2f base = jugador.grid.posicionBase;
         auto& flota = jugador.grid.flota;
 
-        // Limpiamos por si acaso
+        // Limpiamos por seguridad
         flota.clear();
 
         if (jugador.id == 1) {
-            // --- CONFIGURACIÓN JUGADOR 1 (Izquierda) ---
+            // --- JUGADOR 1 (Izquierda) ---
             
-            // Barco 1: Destructor (Relativo a la base)
+            // 1. Destructor
             flota.emplace_back(tDestructor, "Destructor P1");
             flota.back().sprite.setScale({0.3f, 0.3f});
-            // Posición relativa: Base + (50, 50)
             flota.back().sprite.setPosition({base.x + 50.f, base.y + 50.f});
 
-            // Barco 2: Portaviones
+            // 2. Portaviones
             flota.emplace_back(tPortaviones, "Portaviones P1");
             flota.back().sprite.setScale({0.5f, 0.5f});
             flota.back().sprite.setPosition({base.x + 50.f, base.y + 250.f});
         } 
         else {
-            // --- CONFIGURACIÓN JUGADOR 2 (Derecha) ---
+            // --- JUGADOR 2 (Derecha) ---
             
-            // Nota: Usamos la base para posicionar. Si la base es (700, 0), sumamos desde ahí.
-            
-            // Barco 1: Submarino A
-            flota.emplace_back(tSubmarino, "Submarino A");
-            flota.back().sprite.setScale({0.4f, 0.4f});
-            flota.back().sprite.setPosition({base.x, base.y + 50.f});
-            flota.back().sprite.setColor({200, 200, 255}); // Tinte diferente
+            // 1. Submarino P2 (Posición Y = 50)
+            flota.emplace_back(tSubmarino, "Submarino P2");
+            auto& sub = flota.back().sprite;
+            sub.setScale({0.4f, 0.4f});
+            sub.setPosition({base.x + 20.f, base.y + 50.f});
+            sub.setColor({200, 200, 255}); 
 
-            // Barco 2: Submarino B
-            flota.emplace_back(tSubmarino, "Submarino B");
-            flota.back().sprite.setScale({0.4f, 0.4f});
-            flota.back().sprite.setPosition({base.x, base.y + 350.f});
-            flota.back().sprite.setColor({200, 200, 255});
+            // 2. Portaviones P2 (MOVIDO A Y = 350)
+            // Se aumentó la separación vertical para evitar que choque con el Submarino.
+            flota.emplace_back(tPortaviones, "Portaviones P2");
+            auto& carrier = flota.back().sprite;
+            carrier.setScale({0.5f, 0.5f});
+            
+            // Nueva posición: Más abajo para dar espacio
+            carrier.setPosition({base.x + 50.f, base.y + 350.f}); 
         }
     }
 }
