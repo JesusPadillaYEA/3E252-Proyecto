@@ -128,6 +128,31 @@ int main() {
     sf::Sound sAirStrike(bufferAirStrike);
     sAirStrike.setVolume(volEfectos);
 
+    sf::SoundBuffer bufferNotas;
+    if (!bufferNotas.loadFromFile("assets/sounds/notas.ogg")) std::cerr << "Error loading notas.ogg" << std::endl;
+    sf::Sound sNotas(bufferNotas);
+    sNotas.setVolume(volEfectos);
+
+    // 2. Sonido Error
+    sf::SoundBuffer bufferError;
+    if (!bufferError.loadFromFile("assets/sounds/err.ogg")) std::cerr << "Error loading err.ogg" << std::endl;
+    sf::Sound sError(bufferError);
+    sError.setVolume(volEfectos);
+
+    // 3. Sonidos Disparo (Acierto/Fallo)
+    sf::SoundBuffer bufferShotFail, bufferShotDone;
+    if (!bufferShotFail.loadFromFile("assets/sounds/shot_fail.ogg")) std::cerr << "Error loading shot_fail.ogg" << std::endl;
+    if (!bufferShotDone.loadFromFile("assets/sounds/shot_done.ogg")) std::cerr << "Error loading shot_done.ogg" << std::endl;
+    
+    sf::Sound sShotFail(bufferShotFail);
+    sf::Sound sShotDone(bufferShotDone);
+    sShotFail.setVolume(volEfectos);
+    sShotDone.setVolume(volEfectos);
+
+    // VARIABLE DE CONTROL PARA ESPERAR EL SONIDO DEL DISPARO
+    int faseDisparoNormal = 0; // 0 = Inactivo, 1 = Sonando
+    sf::Sound* sonidoDisparoActual = nullptr; // Puntero para saber cuál esperar
+
     // --- UI DEL MENU ---
     // Fondo oscuro
     sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
@@ -365,6 +390,7 @@ int main() {
                         sRadar.stop(); 
                         sUAV.stop();
                         sAirStrike.stop();
+                        sShotFail.stop(); sShotDone.stop(); sNotas.stop(); sError.stop();
                     } 
                     else {
                         // Alternar pausa
@@ -395,6 +421,11 @@ int main() {
                             sUAV.setVolume(volEfectos);
                             sButton.setVolume(volEfectos);
                             sAirStrike.setVolume(volEfectos);
+
+                            sNotas.setVolume(volEfectos);
+                            sError.setVolume(volEfectos);
+                            sShotFail.setVolume(volEfectos);
+                            sShotDone.setVolume(volEfectos);
                         }
                     }
                     else if (k->code == sf::Keyboard::Key::Right) {
@@ -410,6 +441,11 @@ int main() {
                             sUAV.setVolume(volEfectos);
                             sButton.setVolume(volEfectos);
                             sAirStrike.setVolume(volEfectos);
+
+                            sNotas.setVolume(volEfectos);
+                            sError.setVolume(volEfectos);
+                            sShotFail.setVolume(volEfectos);
+                            sShotDone.setVolume(volEfectos);
                         }
                     }
                 }
@@ -462,7 +498,7 @@ int main() {
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
             // Bloquear input durante animaciones
-            if (lanzandoUAV || lanzandoUAVRefuerzo || faseAtaqueAereo > 0) continue;
+            if (lanzandoUAV || lanzandoUAVRefuerzo || faseAtaqueAereo > 0 || faseDisparoNormal > 0) continue;
 
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
@@ -479,6 +515,7 @@ int main() {
                                 }
                                 else if (jugadorActual->cooldownRadar > 0) {
                                     msgError = "SISTEMA ENFRIANDOSE. ESPERA " + std::to_string(jugadorActual->cooldownRadar) + " TURNO(S).";
+                                    sError.play();
                                     errorTimer = 2.0f;
                                 }
                                 else {
@@ -526,6 +563,7 @@ int main() {
                         // --- BOTON NOTAS ---
                         else if (btnNotas.esClickeado(mousePos) && !modoRadar) {
                             sButton.play();
+                            sNotas.play();
                             modoNotas = !modoNotas;
                             if (modoNotas) {
                                 btnNotas.setColor(sf::Color::White); 
@@ -555,6 +593,7 @@ int main() {
                                     // *** LOGICA AIR STRIKE ***
                                     if (jugadorActual->cooldownAtaqueAereo > 0) {
                                         msgError = "ESCUADRON REPOSTANDO. ESPERA " + std::to_string(jugadorActual->cooldownAtaqueAereo) + " TURNO(S).";
+                                        sError.play();
                                         errorTimer = 2.0f;
                                     } else {
                                         // INICIAR ANIMACION (Sin flecha, directo)
@@ -633,12 +672,25 @@ int main() {
                         impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
 
                         if (jugadorEnemigo) {
-                            AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
+                            // Ejecutamos el daño y obtenemos si acertó o no
+                            bool acerto = AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
+                            
+                            // REPRODUCIR SONIDO SEGUN RESULTADO
+                            if (acerto) {
+                                sShotDone.play();
+                                sonidoDisparoActual = &sShotDone;
+                            } else {
+                                sShotFail.play();
+                                sonidoDisparoActual = &sShotFail;
+                            }
+                            
+                            // ACTIVAR ESPERA DE TURNO
+                            faseDisparoNormal = 1;
                         }
                         IndicatorManager::actualizarTurnos(*jugadorActual);
                         apuntando = false; sel = -1;
                         btnAtacar.resetColor();
-                        estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
+                        
                     }
                 }
             }
@@ -728,6 +780,16 @@ int main() {
                     IndicatorManager::actualizarTurnos(*jugadorActual);
                     estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                 }
+            }
+        }else if (faseDisparoNormal == 1) {
+            // Verificar si el sonido terminó
+            if (sonidoDisparoActual && sonidoDisparoActual->getStatus() == sf::Sound::Status::Stopped) {
+                faseDisparoNormal = 0; // Terminar fase
+                sonidoDisparoActual = nullptr;
+
+                // AHORA SI, CAMBIAR DE TURNO
+                IndicatorManager::actualizarTurnos(*jugadorActual);
+                estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
             }
         }
         else if (!modoRadar && !modoNotas) {
