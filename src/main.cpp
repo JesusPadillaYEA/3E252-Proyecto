@@ -104,6 +104,14 @@ int main() {
 
     // ... (Después de cargar músicaFondo) ...
 
+    // >>> NUEVO: SONIDO UAV <<<
+    sf::SoundBuffer bufferUAV;
+    if (!bufferUAV.loadFromFile("assets/sounds/uav.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/sounds/uav.ogg" << std::endl;
+    }
+    sf::Sound sUAV(bufferUAV);
+    sUAV.setVolume(volEfectos);
+
     // --- UI DEL MENU ---
     // Fondo oscuro
     sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
@@ -338,6 +346,8 @@ int main() {
                         modoRadar = false; modoNotas = false; faseAtaqueAereo = 0;
                         lanzandoUAV = false; lanzandoUAVRefuerzo = false;
                         btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
+                        sRadar.stop(); 
+                        sUAV.stop();
                     } 
                     else {
                         // Alternar pausa
@@ -363,6 +373,7 @@ int main() {
                             if (volEfectos < 0.f) volEfectos = 0.f;
                             // Aquí actualizarías el volumen de tus efectos futuros
                             sRadar.setVolume(volEfectos);
+                            sUAV.setVolume(volEfectos);
                         }
                     }
                     else if (k->code == sf::Keyboard::Key::Right) {
@@ -374,6 +385,7 @@ int main() {
                             volEfectos += 5.f;
                             if (volEfectos > 100.f) volEfectos = 100.f;
                             sRadar.setVolume(volEfectos);
+                            sUAV.setVolume(volEfectos);
                         }
                     }
                 }
@@ -400,6 +412,7 @@ int main() {
 
                     if (siguienteJugador->radarRefuerzoPendiente) {
                         lanzandoUAVRefuerzo = true;
+                        sUAV.play();
                         siguienteJugador->radarRefuerzoPendiente = false; 
                         siguienteJugador->cooldownRadar = 2; 
                         
@@ -464,6 +477,7 @@ int main() {
                                             uavShapeFallback.setPosition(posInicio);
                                         }
                                         lanzandoUAV = true;
+                                        sUAV.play();
                                         uavTimer.restart();
                                         jugadorActual->cooldownRadar = 2; 
                                         
@@ -624,6 +638,7 @@ int main() {
                     if (uavSprite.getPosition().y < -50.f) {
                         lanzandoUAV = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
                         sRadar.play();
+                        sUAV.stop();
                     }
                 } else {
                     uavShapeFallback.move({0.f, -3.0f});
@@ -637,13 +652,17 @@ int main() {
             if (uavLoaded) {
                 uavSprite.move({0.f, -5.0f}); 
                 if (uavSprite.getPosition().y < -50.f) {
-                    lanzandoUAVRefuerzo = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
+                    lanzandoUAVRefuerzo = false; 
+                    modoRadar = true;
+                    btnRadar.setColor(sf::Color::Red);
+                    
                 }
             } else {
                 uavShapeFallback.move({0.f, -5.0f});
                 if (uavShapeFallback.getPosition().y < -50.f) {
                     lanzandoUAVRefuerzo = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
                     sRadar.play();
+                    sUAV.stop();
                 }
             }
         }
