@@ -26,6 +26,10 @@ public:
     int cooldownRadar;           // Contador de turnos para volver a usar (0 = listo)
     bool radarRefuerzoPendiente; // Si true, el UAV llega al inicio del siguiente turno
 
+    // --- REGLAS DE AIR STRIKE (NUEVO) ---
+    int cooldownAtaqueAereo;     // 0 = listo, >0 = esperando
+    float columnaFuegoX;         // Coordenada X de la franja roja (-1 si no hay)
+
     // Memoria de Inteligencia (Notas)
     std::vector<sf::Vector2f> memoriaRadar;
 
@@ -35,6 +39,10 @@ public:
         // Inicializar estados
         cooldownRadar = 0; // Listo para usar al inicio
         radarRefuerzoPendiente = false;
+
+        // Inicializar Air Strike
+        cooldownAtaqueAereo = 0; 
+        columnaFuegoX = -1.f;
     }
 
     std::vector<BarcoEntity>& getFlota() {
