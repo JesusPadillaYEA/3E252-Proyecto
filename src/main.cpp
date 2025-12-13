@@ -16,6 +16,21 @@
 #include "AttackManager.hpp"
 #include "IndicatorManager.hpp"
 
+// Función auxiliar para checar si un jugador perdió todos sus barcos
+bool verificarVictoria(const Jugador& enemigo) {
+    const auto& flota = enemigo.getFlota();
+    for (const auto& barco : flota) {
+        if (!barco.destruido) return false; // Aún queda al menos uno vivo
+    }
+    return true; // Todos destruidos
+}
+
+void ejecutarLauncher(sf::RenderWindow& window) {
+    window.close();
+    // Ajusta la ruta si es necesario. "start" es para Windows.
+    system("start ./launcher.exe"); 
+}
+
 int main() {
     const sf::Vector2u WINDOW_SIZE(1000, 700);
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Bitacora (SFML 3.0)");
@@ -80,6 +95,24 @@ int main() {
     int opcionMenuSeleccionada = 0; // 0 = Musica, 1 = Efectos
     float volMusica = 50.f;
     float volEfectos = 50.f; // Preparado para futuros sonidos
+
+    // >>> NUEVO: ESTADO DE VICTORIA CON RETRASO <<<
+    int idGanador = 0;       // 0 = Jugando, >0 = Muestra pantalla final
+    int ganadorDetectado = 0; // Almacena quién ganó mientras esperamos la animación
+    float timerVictoria = 0.f; // Cronómetro para el retraso
+
+    
+    sf::Text txtVictoria(font);
+    txtVictoria.setCharacterSize(60);
+    txtVictoria.setStyle(sf::Text::Bold);
+    txtVictoria.setFillColor(sf::Color::Yellow);
+    txtVictoria.setOutlineThickness(4.f);
+    txtVictoria.setOutlineColor(sf::Color::Black);
+    
+    sf::Text txtSubVictoria(font);
+    txtSubVictoria.setString("FLOTA ENEMIGA HUNDIDA\nPresiona ESC para salir");
+    txtSubVictoria.setCharacterSize(24);
+    txtSubVictoria.setFillColor(sf::Color::White);
 
     // Aplicar volumen inicial
     musicaFondo.setVolume(volMusica);
@@ -294,6 +327,13 @@ int main() {
     sf::FloatRect ib = txtInstruccionesVol.getLocalBounds();
     txtInstruccionesVol.setOrigin({ib.size.x/2.f, ib.size.y/2.f});
     txtInstruccionesVol.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 110.f});
+
+   // BOTÓN SALIR EN EL MENÚ DE PAUSA
+    Boton btnSalirMenu(font, "SALIR AL MENU", {250, 50, 50});
+    // Posiciónalo debajo de las opciones de volumen (ajusta Y según tu gusto)
+    btnSalirMenu.setPosition({(float)WINDOW_SIZE.x / 2.f - 125.f, (float)WINDOW_SIZE.y / 2.f + 80.f});
+
+    // Texto de Victoria
     // --- JUGADORES ---
     Jugador p1(1, {0.f, 0.f});
     Jugador p2(2, {700.f, 0.f});
@@ -452,6 +492,10 @@ int main() {
             // --- CONTROL DEL MENU ---
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
+                    if (idGanador != 0) {
+                        ejecutarLauncher(window);
+                        return 0;
+                    }
                     // Si hay una acción en juego, cancelarla primero
                     if (cargandoDisparo || apuntando || moviendo || sel != -1 || modoRadar || modoNotas || faseAtaqueAereo > 0) {
                         cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
@@ -587,6 +631,15 @@ int main() {
                         // Limpiar la lista del jugador correcto
                         siguienteJugador->explosionesPendientes.clear();
                     }
+
+                    if (verificarVictoria(*siguienteJugador)) {
+                        // Si el jugador que empieza el turno no tiene barcos, ganó el OTRO.
+                        // Si es turno de P1 (id 1), gana P2 (id 2), y viceversa.
+                        ganadorDetectado = (siguienteJugador->id == 1) ? 2 : 1;
+                        
+                        // Tiempo de espera para ver las explosiones (ej. 4 segundos)
+                        timerVictoria = 4.0f; 
+                    }
                     // Reducir cooldowns
                     if (siguienteJugador->cooldownRadar > 0) siguienteJugador->cooldownRadar--;
                     if (siguienteJugador->cooldownAtaqueAereo > 0) siguienteJugador->cooldownAtaqueAereo--;
@@ -623,7 +676,7 @@ int main() {
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
             // Bloquear input durante animaciones
-            if (lanzandoUAV || lanzandoUAVRefuerzo || faseAtaqueAereo > 0 || faseDisparoNormal > 0) continue;
+            if (lanzandoUAV || lanzandoUAVRefuerzo || faseAtaqueAereo > 0 || faseDisparoNormal > 0 || idGanador != 0 || ganadorDetectado != 0) continue;
 
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
@@ -830,6 +883,10 @@ int main() {
 
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
                 if (k->code == sf::Keyboard::Key::Escape) {
+                    if (idGanador != 0) {
+                        window.close();
+                        return 0;
+                    }
                     cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
                     modoRadar = false; modoNotas = false;
                     lanzandoUAV = false; lanzandoUAVRefuerzo = false;
@@ -922,6 +979,8 @@ int main() {
                     
                     // Finalizamos turno inmediatamente (la víctima verá el daño al empezar)
                     faseAtaqueAereo = 0;
+
+                    
                     IndicatorManager::actualizarTurnos(*jugadorActual);
                     estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                 }
@@ -929,10 +988,9 @@ int main() {
         }else if (faseDisparoNormal == 1) {
             // Verificar si el sonido terminó
             if (sonidoDisparoActual && sonidoDisparoActual->getStatus() == sf::Sound::Status::Stopped) {
-                faseDisparoNormal = 0; // Terminar fase
+                faseDisparoNormal = 0; 
                 sonidoDisparoActual = nullptr;
 
-                // AHORA SI, CAMBIAR DE TURNO
                 IndicatorManager::actualizarTurnos(*jugadorActual);
                 estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
             }
@@ -953,6 +1011,16 @@ int main() {
         if (cargandoDisparo) {
             potenciaActual += VELOCIDAD_CARGA;
             if (potenciaActual > MAX_DISTANCIA) potenciaActual = MAX_DISTANCIA;
+        }
+
+        // >>> NUEVO: TEMPORIZADOR DE DRAMA VICTORIA <<<
+        if (ganadorDetectado != 0) {
+            timerVictoria -= deltaTime;
+            if (timerVictoria <= 0.f) {
+                // ¡Tiempo cumplido! Mostramos la pantalla oficial
+                idGanador = ganadorDetectado;
+                ganadorDetectado = 0; // Reseteamos para que no entre aquí de nuevo
+            }
         }
 
         if (animOk) {
@@ -1275,6 +1343,29 @@ int main() {
             window.draw(valEfectosTxt);
 
             window.draw(txtInstruccionesVol);
+        }
+
+        // --- PANTALLA DE VICTORIA ---
+        if (idGanador != 0) {
+            window.draw(fondoMenu); 
+
+            // Usamos L"" para soportar caracteres especiales
+            std::wstring strGanador = (idGanador == 1) ? L"¡JUGADOR 1 GANA!" : L"¡JUGADOR 2 GANA!";
+            txtVictoria.setString(strGanador);
+            
+            sf::FloatRect b1 = txtVictoria.getLocalBounds();
+            txtVictoria.setOrigin({b1.size.x / 2.f, b1.size.y / 2.f});
+            txtVictoria.setPosition({WINDOW_SIZE.x / 2.f, WINDOW_SIZE.y / 2.f - 50.f});
+
+            sf::Text txtSubVictoria(font);
+            txtSubVictoria.setString(L"FLOTA ENEMIGA HUNDIDA\nPresiona ESC para volver al Menu");
+
+            sf::FloatRect b2 = txtSubVictoria.getLocalBounds();
+            txtSubVictoria.setOrigin({b2.size.x / 2.f, b2.size.y / 2.f});
+            txtSubVictoria.setPosition({WINDOW_SIZE.x / 2.f, WINDOW_SIZE.y / 2.f + 50.f});
+
+            window.draw(txtVictoria);
+            window.draw(txtSubVictoria);
         }
 
         window.display();
