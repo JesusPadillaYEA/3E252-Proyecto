@@ -33,9 +33,10 @@ namespace GameState {
         sf::Vector2f origenDisparoReal = {0.f, 0.f};
         
         // Audio menu
-        int opcionMenuSeleccionada = 0;  // 0 = Música, 1 = Efectos
+        int opcionMenuSeleccionada = 0;  // 0 = Música, 1 = Efectos, 2 = Salir
         float volMusica = 50.f;
         float volEfectos = 50.f;
+        bool salirAlLauncher = false;   // Flag para salir al launcher
     };
 
     // Verificar si un jugador perdió todos sus barcos

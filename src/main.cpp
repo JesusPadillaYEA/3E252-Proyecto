@@ -25,10 +25,23 @@
 #include "InputHandler.hpp"
 #include "AnimationSystem.hpp"
 #include "RenderSystem.hpp"
+#include <filesystem>
+#include <vector>
+
+// Función auxiliar para ejecutar un programa verificando múltiples rutas posibles
+void ejecutarPrograma(const std::vector<std::string>& rutas) {
+    for (const auto& ruta : rutas) {
+        if (std::filesystem::exists(ruta)) {
+            system(("start " + ruta).c_str());
+            return;
+        }
+    }
+}
 
 void ejecutarLauncher(sf::RenderWindow& window) {
     window.close();
-    system("start ./JuegoProyecto.exe");
+    // Intenta ejecutar JuegoProyecto.exe en múltiples ubicaciones posibles
+    ejecutarPrograma({"./JuegoProyecto.exe", "./bin/JuegoProyecto.exe", "bin\\JuegoProyecto.exe", "JuegoProyecto.exe"});
 }
 
 int main() {
@@ -725,6 +738,14 @@ int main() {
         // Pantalla de victoria
         if (gameState.idGanador != 0) {
             RenderSystem::dibujarVictoria(window, recursos.font, gameState.idGanador, sistemaParticulas, WINDOW_SIZE);
+        }
+
+        // Salir a launcher
+        if (gameState.salirAlLauncher) {
+            window.close();
+            // Intenta ejecutar JuegoProyecto.exe en múltiples ubicaciones posibles
+            ejecutarPrograma({"./JuegoProyecto.exe", "./bin/JuegoProyecto.exe", "bin\\JuegoProyecto.exe", "JuegoProyecto.exe"});
+            return 0;
         }
 
         window.display();

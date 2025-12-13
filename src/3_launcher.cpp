@@ -1,17 +1,27 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <iostream>
-#include <cstdlib> // Necesario para ejecutar comandos del sistema (system)
+#include <cstdlib>
+#include <filesystem>
+#include <vector>
+
+// Función auxiliar para ejecutar un programa verificando múltiples rutas posibles
+void ejecutarPrograma(const std::vector<std::string>& rutas) {
+    for (const auto& ruta : rutas) {
+        if (std::filesystem::exists(ruta)) {
+            std::system(("start " + ruta).c_str());
+            return;
+        }
+    }
+}
 
 // Función auxiliar para iniciar el juego y cerrar el launcher
 void iniciarJuego(sf::RenderWindow& window, sf::Music& musica) {
     musica.stop();
     window.close();
 
-    // Ejecuta el siguiente programa. 
-    // "start" en Windows permite que el launcher termine mientras el juego se abre.
-    // Si estás en Linux/Mac, quita "start " y usa "./4_interaccion"
-    std::system("start ./main.exe"); 
+    // Intenta ejecutar main.exe en múltiples ubicaciones posibles
+    ejecutarPrograma({"./bin/main.exe", "./main.exe", "bin\\main.exe", "main.exe"}); 
 }
 
 int main() {

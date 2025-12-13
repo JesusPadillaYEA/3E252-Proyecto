@@ -208,8 +208,14 @@ namespace RenderSystem {
         valEfectosTxt.setPosition({cajaMenu.getPosition().x + 190.f, cajaMenu.getPosition().y + 20.f});
         window.draw(valEfectosTxt);
 
+        // === BOTON SALIR ===
+        sf::Text btnSalir(font, "SALIR", 20);
+        btnSalir.setPosition({cajaMenu.getPosition().x - 25.f, cajaMenu.getPosition().y + 80.f});
+        btnSalir.setFillColor((data.opcionMenuSeleccionada == 2) ? colSel : colNorm);
+        window.draw(btnSalir);
+
         // Instrucciones
-        sf::Text txtInstruccionesVol(font, "ARRIBA/ABAJO: Seleccionar  |  IZQ/DER: Ajustar  |  ESC: Volver", 14);
+        sf::Text txtInstruccionesVol(font, "ARRIBA/ABAJO: Seleccionar  |  IZQ/DER: Ajustar  |  ESC: Volver  |  ENTER: Salir", 14);
         txtInstruccionesVol.setFillColor(sf::Color(150, 150, 150));
         sf::FloatRect ib = txtInstruccionesVol.getLocalBounds();
         txtInstruccionesVol.setOrigin({ib.size.x/2.f, ib.size.y/2.f});

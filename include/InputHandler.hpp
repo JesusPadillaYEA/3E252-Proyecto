@@ -23,9 +23,24 @@ namespace InputHandler {
             return;
         }
 
-        if (k->code == sf::Keyboard::Key::Up || k->code == sf::Keyboard::Key::Down) {
+        // Navegar entre opciones (Música, Efectos, Salir)
+        if (k->code == sf::Keyboard::Key::Up) {
             recursos.sButton.play();
-            data.opcionMenuSeleccionada = (data.opcionMenuSeleccionada == 0) ? 1 : 0;
+            data.opcionMenuSeleccionada = (data.opcionMenuSeleccionada == 0) ? 2 : data.opcionMenuSeleccionada - 1;
+            return;
+        } else if (k->code == sf::Keyboard::Key::Down) {
+            recursos.sButton.play();
+            data.opcionMenuSeleccionada = (data.opcionMenuSeleccionada == 2) ? 0 : data.opcionMenuSeleccionada + 1;
+            return;
+        }
+
+        // Enter para confirmar la opción seleccionada
+        if (k->code == sf::Keyboard::Key::Enter) {
+            if (data.opcionMenuSeleccionada == 2) {
+                // Salir al launcher
+                data.salirAlLauncher = true;
+                return;
+            }
         }
 
         if (k->code == sf::Keyboard::Key::Left) {
@@ -34,7 +49,7 @@ namespace InputHandler {
                 if (data.volMusica < 0.f) data.volMusica = 0.f;
                 musicaFondo.setVolume(data.volMusica);
                 recursos.sButton.play();
-            } else {
+            } else if (data.opcionMenuSeleccionada == 1) {
                 data.volEfectos -= 5.f;
                 if (data.volEfectos < 0.f) data.volEfectos = 0.f;
                 AudioManager::actualizarVolumenEfectos(data.volEfectos,
@@ -49,7 +64,7 @@ namespace InputHandler {
                 if (data.volMusica > 100.f) data.volMusica = 100.f;
                 musicaFondo.setVolume(data.volMusica);
                 recursos.sButton.play();
-            } else {
+            } else if (data.opcionMenuSeleccionada == 1) {
                 data.volEfectos += 5.f;
                 if (data.volEfectos > 100.f) data.volEfectos = 100.f;
                 AudioManager::actualizarVolumenEfectos(data.volEfectos,
