@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string> 
 #include <SFML/Audio.hpp>
+#include <cstdint>
 
 #include "EstadoJuego.hpp"
 #include "Boton.hpp"
@@ -256,6 +257,35 @@ int main() {
     };
     
     std::vector<FuegoVisual> fuegosActivos;
+
+    // >>> NUEVO: ESTRUCTURA PARA FUEGOS ARTIFICIALES (PARTICULAS) <<<
+    // ESTRUCTURA PARA FUEGOS ARTIFICIALES (PARTICULAS ANIMADAS)
+    struct Particula {
+        sf::Vector2f pos;
+        sf::Vector2f vel;
+        float vida;      // 1.0 -> 0.0
+        sf::Color color;
+        
+        // >>> NUEVAS PROPIEDADES DE ANIMACION <<<
+        float angulo;      // Rotación actual
+        float velAngulo;   // Velocidad de giro
+        float escala;      // Tamaño actual
+
+        Particula(sf::Vector2f p, sf::Color c) : pos(p), color(c) {
+            vida = 1.0f;
+            escala = 1.0f;
+            
+            // Física de explosión
+            float a = (std::rand() % 360) * 3.14159f / 180.f;
+            float v = (std::rand() % 60 + 40) / 10.f; // Velocidad 4.0 a 10.0
+            vel = { std::cos(a) * v, std::sin(a) * v };
+
+            // Datos de animación aleatorios para cada chispa
+            angulo = static_cast<float>(std::rand() % 360);
+            velAngulo = static_cast<float>((std::rand() % 200) - 100); // Giro izq o der
+        }
+    };
+    std::vector<Particula> sistemaParticulas;
 
     // --- UI DEL MENU ---
     // Fondo oscuro
@@ -1021,6 +1051,47 @@ int main() {
                 idGanador = ganadorDetectado;
                 ganadorDetectado = 0; // Reseteamos para que no entre aquí de nuevo
             }
+            
+        }
+
+        // 2. FUEGOS ARTIFICIALES (Se ejecutan cuando YA hay un ganador visible)
+        if (idGanador != 0) {
+            // A. Generar nuevas explosiones aleatoriamente
+            if (std::rand() % 20 == 0) { 
+                float x = static_cast<float>(std::rand() % WINDOW_SIZE.x);
+                float y = static_cast<float>(std::rand() % (WINDOW_SIZE.y / 2 + 100));
+                
+                std::vector<sf::Color> paleta = {
+                    sf::Color::Red, sf::Color::Green, sf::Color::Cyan, 
+                    sf::Color::Magenta, sf::Color::Yellow, sf::Color::White,
+                    sf::Color(255, 165, 0)
+                };
+                sf::Color colorExplosion = paleta[std::rand() % paleta.size()];
+
+                for (int i = 0; i < 50; ++i) {
+                    sistemaParticulas.emplace_back(sf::Vector2f(x, y), colorExplosion);
+                }
+            }
+
+            // B. Actualizar partículas existentes (ANIMACION)
+            for (size_t i = 0; i < sistemaParticulas.size(); ) {
+                // Movimiento
+                sistemaParticulas[i].pos += sistemaParticulas[i].vel;
+                sistemaParticulas[i].vel.y += 0.15f; // Gravedad
+                
+                // Animación (Giro y Envejecimiento)
+                sistemaParticulas[i].angulo += sistemaParticulas[i].velAngulo * deltaTime;
+                sistemaParticulas[i].vida -= deltaTime * 0.8f; 
+                
+                // Escala
+                sistemaParticulas[i].escala = sistemaParticulas[i].vida; 
+
+                if (sistemaParticulas[i].vida <= 0.f) {
+                    sistemaParticulas.erase(sistemaParticulas.begin() + i);
+                } else {
+                    ++i;
+                }
+            }
         }
 
         if (animOk) {
@@ -1347,7 +1418,24 @@ int main() {
 
         // --- PANTALLA DE VICTORIA ---
         if (idGanador != 0) {
-            window.draw(fondoMenu); 
+            window.draw(fondoMenu);  
+
+            // >>> DIBUJAR SISTEMA DE PARTICULAS ANIMADAS <<<
+            sf::RectangleShape pixel({3.f, 3.f});
+            // IMPORTANTE: Origen al centro para que rotación y escala funcionen bien
+            pixel.setOrigin({1.5f, 1.5f}); 
+
+            for (const auto& p : sistemaParticulas) {
+                pixel.setPosition(p.pos);
+                pixel.setRotation(sf::degrees(p.angulo));        // Aplicar giro
+                pixel.setScale({p.escala, p.escala}); // Aplicar tamaño dinámico
+                
+                sf::Color c = p.color;
+                c.a = static_cast<std::uint8_t>(p.vida * 255);
+                pixel.setFillColor(c);
+                
+                window.draw(pixel);
+            }
 
             // Usamos L"" para soportar caracteres especiales
             std::wstring strGanador = (idGanador == 1) ? L"¡JUGADOR 1 GANA!" : L"¡JUGADOR 2 GANA!";
