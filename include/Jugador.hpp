@@ -33,6 +33,9 @@ public:
     // Memoria de Inteligencia (Notas)
     std::vector<sf::Vector2f> memoriaRadar;
 
+    // --- NUEVO: REPORTE DE DAÑOS (EXPLOSIONES) ---
+    std::vector<sf::Vector2f> explosionesPendientes; // Coordenadas de barcos destruidos
+
     Jugador(int numeroJugador, sf::Vector2f basePos) 
         : id(numeroJugador), grid(basePos) {
         

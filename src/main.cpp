@@ -21,6 +21,7 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Bitacora (SFML 3.0)");
     window.setFramerateLimit(60);
 
+
     // --- RECURSOS ---
     sf::Font font;
     if (!font.openFromFile("assets/fonts/Ring.ttf")) return -1;
@@ -152,6 +153,37 @@ int main() {
     // VARIABLE DE CONTROL PARA ESPERAR EL SONIDO DEL DISPARO
     int faseDisparoNormal = 0; // 0 = Inactivo, 1 = Sonando
     sf::Sound* sonidoDisparoActual = nullptr; // Puntero para saber cuál esperar
+
+    sf::SoundBuffer bufferDestruccion;
+    if (!bufferDestruccion.loadFromFile("assets/sounds/s_done.ogg")) {
+        std::cerr << "Error: No se pudo cargar assets/sounds/s_done.ogg" << std::endl;
+    }
+    sf::Sound sDestruccion(bufferDestruccion);
+    sDestruccion.setVolume(volEfectos);
+
+    // >>> NUEVO: TEXTURAS DE ANIMACION DE EXPLOSION <<<
+    std::vector<sf::Texture> animExplosionTex(6);
+    bool animOk = true;
+    for (int i = 0; i < 6; ++i) {
+        if (!animExplosionTex[i].loadFromFile("assets/animations/explosion/" + std::to_string(i) + ".png")) {
+            std::cerr << "Error cargando frame de explosion " << i << std::endl;
+            animOk = false;
+        }
+    }
+
+    // Estructura para gestionar animaciones activas
+    struct ExplosionVisual {
+        sf::Sprite sprite;
+        float frameTime; 
+        int currentFrame;
+
+        // --- AGREGAR ESTE CONSTRUCTOR ---
+        ExplosionVisual(const sf::Texture& texture) : sprite(texture) {
+            frameTime = 0.f;
+            currentFrame = 0;
+        }
+    };
+    std::vector<ExplosionVisual> explosionesActivas;
 
     // --- UI DEL MENU ---
     // Fondo oscuro
@@ -426,6 +458,7 @@ int main() {
                             sError.setVolume(volEfectos);
                             sShotFail.setVolume(volEfectos);
                             sShotDone.setVolume(volEfectos);
+                            sDestruccion.setVolume(volEfectos);
                         }
                     }
                     else if (k->code == sf::Keyboard::Key::Right) {
@@ -446,6 +479,7 @@ int main() {
                             sError.setVolume(volEfectos);
                             sShotFail.setVolume(volEfectos);
                             sShotDone.setVolume(volEfectos);
+                            sDestruccion.setVolume(volEfectos);
                         }
                     }
                 }
@@ -671,21 +705,40 @@ int main() {
                         impacto.x = origenDisparoReal.x + std::cos(angulo) * potenciaActual;
                         impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
 
-                        if (jugadorEnemigo) {
-                            // Ejecutamos el daño y obtenemos si acertó o no
-                            bool acerto = AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo);
+                    if (jugadorEnemigo) {
+                            // Vector para capturar coordenadas de barcos destruidos
+                            std::vector<sf::Vector2f> bajas;
+
+                            // Pasamos 'bajas' a la función
+                            bool acerto = AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo, bajas);
                             
-                            // REPRODUCIR SONIDO SEGUN RESULTADO
+                            // GESTION DE BAJAS (ANIMACION Y SONIDO)
+                            if (!bajas.empty()) {
+                                    sDestruccion.play(); 
+                                    for (const auto& pos : bajas) {
+                                        // 1. CREAR CON TEXTURA DIRECTAMENTE
+                                        ExplosionVisual ex(animExplosionTex[0]);
+                                        
+                                        // 2. CONFIGURAR
+                                        sf::FloatRect bounds = ex.sprite.getLocalBounds();
+                                        ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
+                                        ex.sprite.setPosition(pos);
+                                        ex.sprite.setScale({2.0f, 2.0f}); 
+                                        
+                                        // 3. GUARDAR
+                                        explosionesActivas.push_back(ex);
+                                    }
+                                }
+                            
                             if (acerto) {
-                                sShotDone.play();
-                                sonidoDisparoActual = &sShotDone;
+                                if (bajas.empty()) sShotDone.play(); // Solo suena impacto si no hubo destrucción total (para no solapar)
+                                sonidoDisparoActual = bajas.empty() ? &sShotDone : &sDestruccion;
                             } else {
                                 sShotFail.play();
                                 sonidoDisparoActual = &sShotFail;
                             }
                             
-                            // ACTIVAR ESPERA DE TURNO
-                            faseDisparoNormal = 1;
+                            faseDisparoNormal = 1; 
                         }
                         IndicatorManager::actualizarTurnos(*jugadorActual);
                         apuntando = false; sel = -1;
@@ -736,6 +789,8 @@ int main() {
                     lanzandoUAVRefuerzo = false; 
                     modoRadar = true;
                     btnRadar.setColor(sf::Color::Red);
+                    sRadar.play();
+                    sUAV.stop();
                     
                 }
             } else {
@@ -772,10 +827,30 @@ int main() {
                 bool sonidoTerminado = (sAirStrike.getStatus() == sf::Sound::Status::Stopped);
 
                 if (avionFuera && sonidoTerminado) {
-                    // FIN DEL ATAQUE
                     faseAtaqueAereo = 0;
                     if (jugadorEnemigo) {
-                        AttackManager::procesarAtaqueAereo(colObjetivoX, *jugadorEnemigo);
+                        std::vector<sf::Vector2f> bajasAereas;
+                        
+                        // Pasamos 'bajasAereas' a la función
+                        AttackManager::procesarAtaqueAereo(colObjetivoX, *jugadorEnemigo, bajasAereas);
+
+                        // Si hubo bajas por airstrike
+                        if (!bajasAereas.empty()) {
+                            sDestruccion.play();
+                            for (const auto& pos : bajasAereas) {
+                                // 1. CREAR CON TEXTURA DIRECTAMENTE
+                                ExplosionVisual ex(animExplosionTex[0]);
+
+                                // 2. CONFIGURAR
+                                sf::FloatRect bounds = ex.sprite.getLocalBounds();
+                                ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
+                                ex.sprite.setPosition(pos);
+                                ex.sprite.setScale({2.0f, 2.0f});
+                                
+                                // 3. GUARDAR
+                                explosionesActivas.push_back(ex);
+                            }
+                        }
                     }
                     IndicatorManager::actualizarTurnos(*jugadorActual);
                     estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
@@ -808,6 +883,28 @@ int main() {
         if (cargandoDisparo) {
             potenciaActual += VELOCIDAD_CARGA;
             if (potenciaActual > MAX_DISTANCIA) potenciaActual = MAX_DISTANCIA;
+        }
+
+        if (animOk) {
+            for (size_t i = 0; i < explosionesActivas.size(); ) {
+                explosionesActivas[i].frameTime += deltaTime;
+                
+                // Cambiar frame cada 0.1 segundos
+                if (explosionesActivas[i].frameTime > 0.1f) {
+                    explosionesActivas[i].frameTime = 0.f;
+                    explosionesActivas[i].currentFrame++;
+                    
+                    if (explosionesActivas[i].currentFrame >= 6) {
+                        // Animación terminada, eliminar
+                        explosionesActivas.erase(explosionesActivas.begin() + i);
+                        continue; 
+                    } else {
+                        // Actualizar textura
+                        explosionesActivas[i].sprite.setTexture(animExplosionTex[explosionesActivas[i].currentFrame]);
+                    }
+                }
+                ++i;
+            }
         }
 
         if (moviendo && sel != -1 && jugadorActual) {
@@ -962,7 +1059,15 @@ int main() {
                     if (apuntando) cBorde = sf::Color::Red;
                     
                     RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
-                    IndicatorManager::renderizarPistas(window, *jugadorActual, false);
+                    //IndicatorManager::renderizarPistas(window, *jugadorActual, false);
+                    
+                    // ========================================================
+                    // >>> PEGAR AQUÍ EL DIBUJADO DE EXPLOSIONES <<<
+                    // ========================================================
+                    for (const auto& ex : explosionesActivas) {
+                        window.draw(ex.sprite);
+                    }
+                    // ========================================================
 
                     if (apuntando) {
                         txtInfo.setString("Arrastra hacia territorio enemigo...");

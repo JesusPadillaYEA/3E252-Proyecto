@@ -8,14 +8,40 @@
 
 namespace AttackManager {
 
-    // --- ATAQUE AÉREO MODIFICADO ---
-    inline void procesarAtaqueAereo(float xImpacto, Jugador& enemigo) {
-        float anchoAtaque = 60.f;
+    // Se añade el parámetro: std::vector<sf::Vector2f>& bajasReportadas
+    inline bool procesarDisparo(sf::Vector2f posicionImpacto, 
+                                sf::Vector2f origenDisparo, 
+                                Jugador& enemigo,
+                                std::vector<sf::Vector2f>& bajasReportadas) { // <--- NUEVO PARAMETRO
         
-        // 1. MARCAR LA FRANJA ROJA PARA EL TURNO ENEMIGO
+        //IndicatorManager::agregarPista(enemigo, origenDisparo, posicionImpacto);
+
+        auto& flota = enemigo.getFlota();
+        for (auto& barco : flota) {
+            if (barco.destruido) continue;
+
+            if (barco.sprite.getGlobalBounds().contains(posicionImpacto)) {
+                std::cout << ">>> IMPACTO CONFIRMADO EN: " << barco.nombre << std::endl;
+                barco.recibirDano(9999); 
+                
+                // Si el disparo destruyó el barco, guardamos su posición central
+                if (barco.destruido) {
+                    sf::FloatRect b = barco.sprite.getGlobalBounds();
+                    bajasReportadas.push_back({b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f});
+                }
+                return true; 
+            }
+        }
+
+        std::cout << ">>> AGUA en (" << posicionImpacto.x << ", " << posicionImpacto.y << ")" << std::endl;
+        return false; 
+    }
+
+    // Se añade el parámetro: std::vector<sf::Vector2f>& bajasReportadas
+    inline void procesarAtaqueAereo(float xImpacto, Jugador& enemigo, std::vector<sf::Vector2f>& bajasReportadas) { // <--- NUEVO PARAMETRO
+        float anchoAtaque = 60.f;
         enemigo.columnaFuegoX = xImpacto;
 
-        // 2. CALCULAR DAÑO
         sf::FloatRect zonaAtaque({xImpacto - (anchoAtaque / 2.f), -500.f}, {anchoAtaque, 2000.f});
 
         std::cout << ">>> INICIANDO AIR STRIKE EN COLUMNA X: " << xImpacto << std::endl;
@@ -31,6 +57,11 @@ namespace AttackManager {
             if (boundsBarco.findIntersection(zonaAtaque)) {
                 std::cout << ">>> BOMBARDEO EXITOSO EN: " << barco.nombre << std::endl;
                 barco.recibirDano(10000); 
+                
+                // Guardar posición central de la baja
+                sf::FloatRect b = barco.sprite.getGlobalBounds();
+                bajasReportadas.push_back({b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f});
+                
                 huboImpacto = true;
             }
         }
@@ -38,30 +69,5 @@ namespace AttackManager {
         if (!huboImpacto) {
             std::cout << ">>> EL AIR STRIKE NO IMPACTO NINGUN OBJETIVO." << std::endl;
         }
-    }
-
-    inline bool procesarDisparo(sf::Vector2f posicionImpacto, 
-                                sf::Vector2f origenDisparo, 
-                                Jugador& enemigo) {
-        
-        // 1. GENERAR PISTA VISUAL
-        // Guardamos el origen real para que el IndicatorManager dibuje la flecha
-        IndicatorManager::agregarPista(enemigo, origenDisparo, posicionImpacto);
-
-        // 2. CÁLCULO DE IMPACTO (Coordenadas Globales)
-        // Ya no invertimos coordenadas. Si disparas a X=800, compruebas en X=800.
-        auto& flota = enemigo.getFlota();
-        for (auto& barco : flota) {
-            if (barco.destruido) continue;
-
-            if (barco.sprite.getGlobalBounds().contains(posicionImpacto)) {
-                std::cout << ">>> IMPACTO CONFIRMADO EN: " << barco.nombre << std::endl;
-                barco.recibirDano(9999); 
-                return true; 
-            }
-        }
-
-        std::cout << ">>> AGUA en (" << posicionImpacto.x << ", " << posicionImpacto.y << ")" << std::endl;
-        return false; 
     }
 }
