@@ -20,6 +20,24 @@ Luego ejecuta el launcher:
 .\bin\JuegoProyecto.exe
 ```
 
+### 📚 Tutorial Interactivo
+
+El juego incluye un **Tutorial Interactivo** que te enseña los controles básicos de una forma divertida y fácil.
+
+**Para acceder al tutorial:**
+1. Abre el launcher (`JuegoProyecto.exe`)
+2. Haz clic en el botón **"TUTORIAL"** (botón azul)
+3. Sigue las instrucciones paso a paso:
+   - Paso 1: Aprende a mover barcos con flechas
+   - Paso 2: Selecciona barcos con clicks
+   - Paso 3: Apunta tus disparos arrastrando
+   - Paso 4: Dispara a los enemigos
+   - Paso 5: Abre el menú de pausa
+
+El tutorial es **100% interactivo**: completa cada acción para avanzar al siguiente paso. ¡Muy fácil para que nadie se atore!
+
+Una vez completes el tutorial, volverás automáticamente al launcher listo para jugar.
+
 ### 🎯 Objetivo del Juego
 
 Juego de estrategia donde dos jugadores deben aniquilar la flota del otro, varios tipos de barcos repartidos en el océano donde un disparo mal planeado podría definir todo la partida

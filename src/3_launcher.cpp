@@ -8,11 +8,27 @@
 // Función auxiliar para ejecutar un programa verificando múltiples rutas posibles
 void ejecutarPrograma(const std::vector<std::string>& rutas) {
     for (const auto& ruta : rutas) {
-        if (std::filesystem::exists(ruta)) {
+        // Extraer ruta sin argumentos para verificación
+        std::string rutaSinArgs = ruta;
+        size_t espacio = rutaSinArgs.find(' ');
+        if (espacio != std::string::npos) {
+            rutaSinArgs = rutaSinArgs.substr(0, espacio);
+        }
+        
+        if (std::filesystem::exists(rutaSinArgs)) {
             std::system(("start " + ruta).c_str());
             return;
         }
     }
+}
+
+// Función auxiliar para iniciar el tutorial
+void iniciarTutorial(sf::RenderWindow& window, sf::Music& musica) {
+    musica.stop();
+    window.close();
+
+    // Intenta ejecutar main.exe en múltiples ubicaciones posibles con flag --tutorial
+    ejecutarPrograma({"./bin/main.exe --tutorial", "./main.exe --tutorial", "bin\\main.exe --tutorial", "main.exe --tutorial"});
 }
 
 // Función auxiliar para iniciar el juego y cerrar el launcher
@@ -65,12 +81,12 @@ int main() {
     // Crear botón "Iniciar Juego"
     sf::RectangleShape boton({300.f, 80.f});
     boton.setFillColor(sf::Color(220, 20, 60)); // Rojo carmesí
-    boton.setPosition({(window.getSize().x - 300.f) / 2.f, 400.f});
+    boton.setPosition({(window.getSize().x - 300.f) / 2.f, 350.f});
     boton.setOutlineThickness(3.f);
     boton.setOutlineColor(sf::Color::White);
     
     // Texto del botón
-    sf::Text textoBoton(fontRing); // Constructor directo en SFML 3
+    sf::Text textoBoton(fontRing);
     textoBoton.setCharacterSize(40);
     textoBoton.setFillColor(sf::Color::White);
     textoBoton.setString("INICIAR JUEGO");
@@ -83,6 +99,29 @@ int main() {
     textoBoton.setPosition({
         posBoton.x + (sizeBoton.x - botonBounds.size.x) / 2.f,
         posBoton.y + (sizeBoton.y - botonBounds.size.y) / 2.f - 10.f
+    });
+    
+    // Crear botón "Tutorial"
+    sf::RectangleShape botonTutorial({300.f, 80.f});
+    botonTutorial.setFillColor(sf::Color(70, 130, 180)); // Azul acero
+    botonTutorial.setPosition({(window.getSize().x - 300.f) / 2.f, 480.f});
+    botonTutorial.setOutlineThickness(3.f);
+    botonTutorial.setOutlineColor(sf::Color::White);
+    
+    // Texto del botón Tutorial
+    sf::Text textoBotonTutorial(fontRing);
+    textoBotonTutorial.setCharacterSize(40);
+    textoBotonTutorial.setFillColor(sf::Color::White);
+    textoBotonTutorial.setString("TUTORIAL");
+    
+    // Centrar texto en botón tutorial
+    sf::FloatRect botonTutorialBounds = textoBotonTutorial.getLocalBounds();
+    sf::Vector2f posBotonTutorial = botonTutorial.getPosition();
+    sf::Vector2f sizeBotonTutorial = botonTutorial.getSize();
+    
+    textoBotonTutorial.setPosition({
+        posBotonTutorial.x + (sizeBotonTutorial.x - botonTutorialBounds.size.x) / 2.f,
+        posBotonTutorial.y + (sizeBotonTutorial.y - botonTutorialBounds.size.y) / 2.f - 10.f
     });
     
     // Subtítulo
@@ -132,11 +171,15 @@ int main() {
                         iniciarJuego(window, musica);
                         return 0; // Terminar launcher
                     }
+                    if (botonTutorial.getGlobalBounds().contains(mousePos)) {
+                        iniciarTutorial(window, musica);
+                        return 0; // Terminar launcher
+                    }
                 }
             }
         }
         
-        // Efecto visual: Hover sobre el botón
+        // Efecto visual: Hover sobre los botones
         sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
         
         if (boton.getGlobalBounds().contains(mousePos)) {
@@ -145,6 +188,14 @@ int main() {
         } else {
             boton.setFillColor(sf::Color(220, 20, 60)); // Rojo original
             textoBoton.setFillColor(sf::Color::White);
+        }
+        
+        if (botonTutorial.getGlobalBounds().contains(mousePos)) {
+            botonTutorial.setFillColor(sf::Color(100, 149, 237)); // Azul más brillante
+            textoBotonTutorial.setFillColor(sf::Color::Yellow);
+        } else {
+            botonTutorial.setFillColor(sf::Color(70, 130, 180)); // Azul acero original
+            textoBotonTutorial.setFillColor(sf::Color::White);
         }
         
         // Renderizado
@@ -160,6 +211,8 @@ int main() {
         window.draw(subtitulo);
         window.draw(boton);
         window.draw(textoBoton);
+        window.draw(botonTutorial);
+        window.draw(textoBotonTutorial);
         window.draw(instrucciones);
         
         window.display();

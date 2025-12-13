@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include "EstadoJuego.hpp"
 #include "Jugador.hpp"
+#include "TutorialSystem.hpp"
 
 namespace GameState {
 
@@ -13,6 +14,8 @@ namespace GameState {
         
         bool juegoPausado = false;
         bool moviendo = false;
+        bool enTutorial = false;     // Flag para indicar que estamos en modo tutorial
+        TutorialSystem::TutorialData datosTutorial;
         bool apuntando = false;
         bool modoRadar = false;
         bool modoNotas = false;

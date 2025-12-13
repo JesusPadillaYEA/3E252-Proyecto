@@ -25,6 +25,7 @@
 #include "InputHandler.hpp"
 #include "AnimationSystem.hpp"
 #include "RenderSystem.hpp"
+#include "TutorialScene.hpp"
 #include <filesystem>
 #include <vector>
 
@@ -44,10 +45,19 @@ void ejecutarLauncher(sf::RenderWindow& window) {
     ejecutarPrograma({"./JuegoProyecto.exe", "./bin/JuegoProyecto.exe", "bin\\JuegoProyecto.exe", "JuegoProyecto.exe"});
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     const sf::Vector2u WINDOW_SIZE(1000, 700);
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Bitacora (SFML 3.0)");
     window.setFramerateLimit(60);
+
+    // === VERIFICAR ARGUMENTOS (TUTORIAL) ===
+    bool modoTutorial = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--tutorial") {
+            modoTutorial = true;
+            break;
+        }
+    }
 
     // === CARGAR RECURSOS ===
     ResourceManager::Resources recursos = ResourceManager::cargarRecursos();
@@ -55,7 +65,15 @@ int main() {
 
     // === ESTADO DEL JUEGO ===
     GameState::StateData gameState;
+    gameState.enTutorial = modoTutorial;
+    if (modoTutorial) TutorialSystem::resetearTutorial(gameState.datosTutorial);
     AudioManager::AudioState audioState;
+
+    // === ESCENA DEL TUTORIAL (si aplica) ===
+    TutorialScene::Scene* scenaTutorial = nullptr;
+    if (modoTutorial) {
+        scenaTutorial = new TutorialScene::Scene(recursos.tDest, recursos.tPort, recursos.tSub, recursos.tMar, recursos.font);
+    }
 
     // === VARIABLES PARA ANIMACIONES ===
     std::vector<AnimationSystem::ExplosionVisual> explosionesActivas;
@@ -129,6 +147,43 @@ int main() {
     const float MAX_DISTANCIA = 1500.f;
 
     // === CICLO PRINCIPAL ===
+    // === LOOP DEL TUTORIAL (TOTALMENTE INDEPENDIENTE) ===
+    if (gameState.enTutorial && scenaTutorial) {
+        while (window.isOpen()) {
+            while (const auto ev = window.pollEvent()) {
+                if (ev->is<sf::Event::Closed>()) {
+                    window.close();
+                    break;
+                }
+                
+                TutorialScene::procesarEventosTutorial(&(*ev), *scenaTutorial, gameState, recursos, WINDOW_SIZE);
+                
+                // Detectar si completó el tutorial con ENTER
+                if (gameState.datosTutorial.pasoActual == TutorialSystem::COMPLETADO) {
+                    if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
+                        if (k->code == sf::Keyboard::Key::Enter) {
+                            window.close();
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Actualizar lógica del tutorial (timers, auto-avances, animaciones)
+            TutorialScene::actualizarTutorial(*scenaTutorial, gameState, recursos);
+            
+            // Renderizar escena de tutorial
+            TutorialScene::renderizarEscena(window, *scenaTutorial, recursos, gameState, WINDOW_SIZE);
+            window.display();
+        }
+        
+        // Tutorial completado, volver al programa principal
+        if (scenaTutorial) delete scenaTutorial;
+        ejecutarPrograma({"./JuegoProyecto.exe", "./bin/JuegoProyecto.exe", "bin\\JuegoProyecto.exe", "JuegoProyecto.exe"});
+        return 0;
+    }
+
+    // === LOOP DEL JUEGO PRINCIPAL ===
     while (window.isOpen()) {
         float deltaTime = dtClock.restart().asSeconds();
 
@@ -566,7 +621,9 @@ int main() {
         // Actualizar posición de barco seleccionado
         if (gameState.moviendo && gameState.sel != -1 && jugadorActual) {
             auto& barco = jugadorActual->getFlota()[gameState.sel];
-            if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), gameState.sel, WINDOW_SIZE);
+            if (!barco.destruido) {
+                MovementManager::procesarInput(jugadorActual->getFlota(), gameState.sel, WINDOW_SIZE);
+            }
         }
 
         // Posicionar botones de acción
@@ -751,5 +808,6 @@ int main() {
         window.display();
     }
 
+    if (scenaTutorial) delete scenaTutorial;
     return 0;
 }
