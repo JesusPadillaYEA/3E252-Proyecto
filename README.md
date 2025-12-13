@@ -9,23 +9,40 @@ Juego de estrategia donde dos jugadores deben aniquilar la flota del otro, vario
 
 Lista los controles:
 
-- Flechas: Movimiento (unidades de combate) / movimiento de configuración (música y sonido)
-- esc: menu de volumenes 
-- Mouse: Seleccionar / disparar
+- **Flechas**: Movimiento (unidades de combate) / movimiento de configuración (música y sonido)
+- **ESC**: Menú de pausa y volúmenes / Salir de modos especiales
+- **Mouse**: 
+  - **Clic Izquierdo**: Seleccionar unidad / Activar botones / Disparar
+  - **Arrastrar**: Apuntar disparo (fuerza y dirección)
 
-### ⚙️ Mecánicas
+### ⚙️ Mecánicas y Reglas
 
-- Turnos alternados entre jugadores
-- Colocación estratégica de unidades
-- Ataque según reglas definidas
-- Condición de victoria y derrota
+#### ⚔️ Combate Básico
+* **Turnos Alternados**: El juego se desarrolla por turnos. Cada jugador puede realizar una acción de movimiento o ataque por turno.
+* **Ataque Normal**: Disponible para todas las unidades. Selecciona un barco, presiona "ATACAR" y arrastra el mouse desde el barco para definir potencia y ángulo. El proyectil tiene un radio de explosión al impactar.
+* **Movimiento**: Las unidades pueden moverse distancias cortas para esquivar ataques futuros, consumiendo el turno.
 
-### 🏆 Características
+#### 🚢 Habilidades Especiales (Clase Portaviones)
+El **Portaviones** es la unidad táctica central. Mientras esté operativo, permite el uso de soporte avanzado:
 
-- Modo de juego por turnos
-- Multijugador local
-- Gráficos 2D estilizados (estilo pixel art)
-- Sonido y música originales (IA)
+1.  **🛩️ Ataque Aéreo (Air Strike)**
+    * **Efecto**: Lanza un caza que bombardea una columna vertical completa en el campo enemigo. Ideal para golpear sin apuntar con precisión.
+    * **Requisito**: Portaviones activo.
+    * **Enfriamiento (Cooldown)**: **5 turnos** de recarga.
+    * **Alerta**: Deja una zona de fuego residual visible durante el turno del oponente.
+
+2.  **📡 Radar (UAV)**
+    * **Efecto**: Despliega un dron de reconocimiento que revela momentáneamente la posición de la flota enemiga y guarda "ecos" en la Bitácora.
+    * **Requisito**: Portaviones activo. Si el portaviones es destruido, se perderá la conexión y se requerirá un turno extra para solicitar refuerzos aéreos externos.
+    * **Enfriamiento (Cooldown)**: **2 turnos** de recarga.
+
+#### 📝 Sistema de Notas y Bitácora
+* Accede mediante el botón **"NOTAS"**.
+* Despliega un mapa táctico estilo "papel" que muestra las últimas posiciones confirmadas por el Radar.
+* **Uso Libre**: Consultar las notas no consume el turno, permitiendo planear la estrategia antes de actuar.
+
+### 🏆 Condiciones de Victoria
+* **Aniquilación Total**: La partida termina inmediatamente cuando todos los barcos de un jugador han sido destruidos.
 
 ### 👥 Equipo
 
@@ -36,9 +53,4 @@ Lista los controles:
 
 - Motor/Framework: SFML.
 - Lenguaje: C++/CMake.
-- Librerías adicionales: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll, sfml-audio-3.dll, sfml-graphics-3.dll, sfml-system-3.dll, sfml-window-3.dll
-
-### 📜 Créditos
-
-- Inspirado en el juego de mesa "Battleship" (Hasbro Gaming)
-- Tipografía: https://www.dafont.com/es/impacted.font
+- Librerías adicionales: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll, sfml-audio-3.dll, sfml-...
