@@ -34,7 +34,7 @@ El **Portaviones** es la unidad vital para el soporte táctico. Si es destruido,
 1.  **📡 Radar / UAV (Acción Libre)**
     * **Efecto**: Escanea el campo enemigo y revela posiciones en la Bitácora.
     * **Costo**: **NO consume el turno**. Puedes usar el radar, ver dónde están los enemigos y luego disparar en el mismo turno.
-    * **Requisito**: Portaviones activo.
+    * **Requisito**: Portaviones activo. Si el portaviones es destruido, se perderá la conexión y se requerirá un turno extra para solicitar refuerzos aéreos externos.
     * **Enfriamiento**: **2 turnos**.
 
 2.  **🛩️ Ataque Aéreo / Air Strike (Finaliza el Turno)**
