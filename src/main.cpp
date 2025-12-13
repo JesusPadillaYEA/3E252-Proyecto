@@ -29,7 +29,7 @@ bool verificarVictoria(const Jugador& enemigo) {
 void ejecutarLauncher(sf::RenderWindow& window) {
     window.close();
     // Ajusta la ruta si es necesario. "start" es para Windows.
-    system("start ./launcher.exe"); 
+    system("start ./JuegoProyecto.exe"); 
 }
 
 int main() {

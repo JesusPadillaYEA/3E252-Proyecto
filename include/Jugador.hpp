@@ -33,9 +33,6 @@ public:
     // Memoria de Inteligencia (Notas)
     std::vector<sf::Vector2f> memoriaRadar;
 
-    // >>> NUEVO: LISTA DE EXPLOSIONES PENDIENTES <<<
-    // Aquí se guardan las coordenadas de los barcos destruidos por el enemigo
-    // para mostrarlas al inicio de TU turno.
     std::vector<sf::Vector2f> explosionesPendientes;
 
     Jugador(int numeroJugador, sf::Vector2f basePos) 
