@@ -1,7 +1,6 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <vector>
-#include <iostream>
 #include "BarcoEntity.hpp"
 #include "Jugador.hpp"
 #include "IndicatorManager.hpp"
@@ -21,7 +20,6 @@ namespace AttackManager {
             if (barco.destruido) continue;
 
             if (barco.sprite.getGlobalBounds().contains(posicionImpacto)) {
-                std::cout << ">>> IMPACTO CONFIRMADO EN: " << barco.nombre << std::endl;
                 barco.recibirDano(9999); 
                 
                 // SI SE DESTRUYÓ, GUARDAMOS LA POSICIÓN EN EL VECTOR
@@ -50,7 +48,6 @@ namespace AttackManager {
             
             // Usamos findIntersection (SFML 3 devuelve std::optional, evaluamos si tiene valor)
             if (boundsBarco.findIntersection(zonaAtaque)) {
-                std::cout << ">>> BOMBARDEO EXITOSO EN: " << barco.nombre << std::endl;
                 barco.recibirDano(10000); 
                 
                 // GUARDAR POSICIÓN DE LA BAJA

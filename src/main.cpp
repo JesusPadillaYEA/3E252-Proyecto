@@ -1,11 +1,12 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <string> 
-#include <SFML/Audio.hpp>
+#include <string>
 #include <cstdint>
 
+// Headers del proyecto
 #include "EstadoJuego.hpp"
 #include "Boton.hpp"
 #include "CollisionManager.hpp"
@@ -17,19 +18,17 @@
 #include "AttackManager.hpp"
 #include "IndicatorManager.hpp"
 
-// Función auxiliar para checar si un jugador perdió todos sus barcos
-bool verificarVictoria(const Jugador& enemigo) {
-    const auto& flota = enemigo.getFlota();
-    for (const auto& barco : flota) {
-        if (!barco.destruido) return false; // Aún queda al menos uno vivo
-    }
-    return true; // Todos destruidos
-}
+// Headers del nuevo sistema modular
+#include "GameState.hpp"
+#include "ResourceManager.hpp"
+#include "AudioManager.hpp"
+#include "InputHandler.hpp"
+#include "AnimationSystem.hpp"
+#include "RenderSystem.hpp"
 
 void ejecutarLauncher(sf::RenderWindow& window) {
     window.close();
-    // Ajusta la ruta si es necesario. "start" es para Windows.
-    system("start ./JuegoProyecto.exe"); 
+    system("start ./JuegoProyecto.exe");
 }
 
 int main() {
@@ -37,40 +36,32 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE), "Batalla Naval - Bitacora (SFML 3.0)");
     window.setFramerateLimit(60);
 
+    // === CARGAR RECURSOS ===
+    ResourceManager::Resources recursos = ResourceManager::cargarRecursos();
+    if (!recursos.assetsOk) return -1;
 
-    // --- RECURSOS ---
-    sf::Font font;
-    if (!font.openFromFile("assets/fonts/Ring.ttf")) return -1;
+    // === ESTADO DEL JUEGO ===
+    GameState::StateData gameState;
+    AudioManager::AudioState audioState;
 
-    sf::Texture tDest, tSub, tMar, tPort, tUAV;
-    bool assetsOk = true;
-    if (!tDest.loadFromFile("assets/images/destructor .png")) assetsOk = false;
-    if (!tSub.loadFromFile("assets/images/submarino.png")) assetsOk = false;
-    if (!tMar.loadFromFile("assets/images/mar.png")) assetsOk = false;
-    if (!tPort.loadFromFile("assets/images/portaviones.png")) tPort = tDest; 
-    
-    bool uavLoaded = tUAV.loadFromFile("assets/images/UAV.png");
-    
-    // Recurso Avion de Ataque
-    sf::Texture tAvionAtaque;
-    bool avionLoaded = tAvionAtaque.loadFromFile("assets/images/avion1.png");
-    sf::Sprite sAvionAtaque(tAvionAtaque);
-    if (avionLoaded) {
-        sf::FloatRect bounds = sAvionAtaque.getLocalBounds();
-        sAvionAtaque.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
-    }
+    // === VARIABLES PARA ANIMACIONES ===
+    std::vector<AnimationSystem::ExplosionVisual> explosionesActivas;
+    std::vector<AnimationSystem::FuegoVisual> fuegosActivos;
+    std::vector<AnimationSystem::Particula> sistemaParticulas;
 
-    if (!assetsOk) return -1;
+    // === VISUALES DEL RADAR Y NOTAS ===
+    RenderSystem::RadarVisuals radarVisuals = RenderSystem::inicializarRadar(WINDOW_SIZE);
+    RenderSystem::NotasVisuals notasVisuals = RenderSystem::inicializarNotas(WINDOW_SIZE);
 
-    tMar.setRepeated(true);
-    sf::Sprite fondo(tMar);
+    // === FONDO ANIMADO ===
+    sf::Sprite fondo(recursos.tMar);
     float offset[2] = {0.f, 0.f};
     fondo.setTextureRect(sf::IntRect({0, 0}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
 
-    // --- SPRITE DEL UAV ---
-    sf::Sprite uavSprite(tUAV); 
+    // === SPRITE DEL UAV ===
+    sf::Sprite uavSprite(recursos.tUAV);
     sf::CircleShape uavShapeFallback(5.f, 3);
-    if (uavLoaded) {
+    if (recursos.uavLoaded) {
         sf::FloatRect uavBounds = uavSprite.getLocalBounds();
         uavSprite.setOrigin({uavBounds.size.x / 2.f, uavBounds.size.y / 2.f});
     } else {
@@ -78,614 +69,157 @@ int main() {
         uavShapeFallback.setOrigin({5.f, 5.f});
     }
 
-    // ... (Después de cargar texturas y fuentes) ...
-
-    // --- MUSICA DE FONDO ---
-    sf::Music musicaFondo;
-    // Intentar cargar el audio. Si falla, solo muestra error en consola pero el juego sigue.
-    if (!musicaFondo.openFromFile("assets/music/main.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/music/main.ogg" << std::endl;
-    } else {
-        musicaFondo.setLooping(true); // Repetir en bucle
-        musicaFondo.setVolume(50.f);  // Volumen inicial al 50%
-        musicaFondo.play();
-    }
-    
-    // --- CONFIGURACIÓN DE AUDIO Y MENU ---
-    bool juegoPausado = false;
-    int opcionMenuSeleccionada = 0; // 0 = Musica, 1 = Efectos
-    float volMusica = 50.f;
-    float volEfectos = 50.f; // Preparado para futuros sonidos
-
-    // >>> NUEVO: ESTADO DE VICTORIA CON RETRASO <<<
-    int idGanador = 0;       // 0 = Jugando, >0 = Muestra pantalla final
-    int ganadorDetectado = 0; // Almacena quién ganó mientras esperamos la animación
-    float timerVictoria = 0.f; // Cronómetro para el retraso
-
-    
-    sf::Text txtVictoria(font);
-    txtVictoria.setCharacterSize(60);
-    txtVictoria.setStyle(sf::Text::Bold);
-    txtVictoria.setFillColor(sf::Color::Yellow);
-    txtVictoria.setOutlineThickness(4.f);
-    txtVictoria.setOutlineColor(sf::Color::Black);
-    
-    sf::Text txtSubVictoria(font);
-    txtSubVictoria.setString("FLOTA ENEMIGA HUNDIDA\nPresiona ESC para salir");
-    txtSubVictoria.setCharacterSize(24);
-    txtSubVictoria.setFillColor(sf::Color::White);
-
-    // Aplicar volumen inicial
-    musicaFondo.setVolume(volMusica);
-
-    // >>> NUEVO: CARGAR SONIDO RADAR (CORREGIDO PARA SFML 3) <<<
-    sf::SoundBuffer bufferRadar;
-    
-    // 1. Intentamos cargar el archivo primero
-    if (!bufferRadar.loadFromFile("assets/sounds/radar.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/sounds/radar.ogg" << std::endl;
-    } 
-    
-    // 2. Declaramos el Sound pasando el buffer como argumento (Obligatorio en SFML 3)
-    sf::Sound sRadar(bufferRadar);
-    
-    // 3. Configuramos sus propiedades
-    sRadar.setLooping(true); 
-    sRadar.setVolume(volEfectos);
-    // >>> FIN NUEVO <<<
-
-    // Aplicar volumen inicial
-    musicaFondo.setVolume(volMusica);
-
-    // ... (Después de cargar músicaFondo) ...
-
-    // >>> NUEVO: SONIDO UAV <<<
-    sf::SoundBuffer bufferUAV;
-    if (!bufferUAV.loadFromFile("assets/sounds/uav.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/sounds/uav.ogg" << std::endl;
-    }
-    sf::Sound sUAV(bufferUAV);
-    sUAV.setVolume(volEfectos);
-
-    // >>> NUEVO: SONIDO DE INTERFAZ (BOTONES) <<<
-    sf::SoundBuffer bufferButton;
-    if (!bufferButton.loadFromFile("assets/sounds/button.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/sounds/button.ogg" << std::endl;
-    }
-    sf::Sound sButton(bufferButton);
-    sButton.setVolume(volEfectos);
-
-    // >>> NUEVO: SONIDO AIR STRIKE <<<
-    sf::SoundBuffer bufferAirStrike;
-    if (!bufferAirStrike.loadFromFile("assets/sounds/airstrike.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/sounds/airstrike.ogg" << std::endl;
-    }
-    sf::Sound sAirStrike(bufferAirStrike);
-    sAirStrike.setVolume(volEfectos);
-
-    sf::SoundBuffer bufferNotas;
-    if (!bufferNotas.loadFromFile("assets/sounds/notas.ogg")) std::cerr << "Error loading notas.ogg" << std::endl;
-    sf::Sound sNotas(bufferNotas);
-    sNotas.setVolume(volEfectos);
-
-    // 2. Sonido Error
-    sf::SoundBuffer bufferError;
-    if (!bufferError.loadFromFile("assets/sounds/err.ogg")) std::cerr << "Error loading err.ogg" << std::endl;
-    sf::Sound sError(bufferError);
-    sError.setVolume(volEfectos);
-
-    // 3. Sonidos Disparo (Acierto/Fallo)
-    sf::SoundBuffer bufferShotFail, bufferShotDone;
-    if (!bufferShotFail.loadFromFile("assets/sounds/shot_fail.ogg")) std::cerr << "Error loading shot_fail.ogg" << std::endl;
-    if (!bufferShotDone.loadFromFile("assets/sounds/shot_done.ogg")) std::cerr << "Error loading shot_done.ogg" << std::endl;
-    
-    sf::Sound sShotFail(bufferShotFail);
-    sf::Sound sShotDone(bufferShotDone);
-    sShotFail.setVolume(volEfectos);
-    sShotDone.setVolume(volEfectos);
-
-    // VARIABLE DE CONTROL PARA ESPERAR EL SONIDO DEL DISPARO
-    int faseDisparoNormal = 0; // 0 = Inactivo, 1 = Sonando
-    sf::Sound* sonidoDisparoActual = nullptr; // Puntero para saber cuál esperar
-
-   // >>> NUEVO: SONIDO DESTRUCCION <<<
-    sf::SoundBuffer bufferDestruccion;
-    if (!bufferDestruccion.loadFromFile("assets/sounds/s_done.ogg")) {
-        std::cerr << "Error cargando s_done.ogg" << std::endl;
-    }
-    sf::Sound sDestruccion(bufferDestruccion);
-    sDestruccion.setVolume(volEfectos);
-
-    // >>> NUEVO: ANIMACION EXPLOSION <<<
-    std::vector<sf::Texture> animExplosionTex(6);
-    bool animOk = true;
-    for (int i = 0; i < 6; ++i) {
-        if (!animExplosionTex[i].loadFromFile("assets/animations/explosion/" + std::to_string(i) + ".png")) {
-            std::cerr << "Error cargando frame explosion " << i << std::endl;
-            animOk = false;
-        }
+    // === SPRITE DEL AVIÓN DE ATAQUE ===
+    sf::Sprite sAvionAtaque(recursos.tAvionAtaque);
+    if (recursos.avionLoaded) {
+        sf::FloatRect bounds = sAvionAtaque.getLocalBounds();
+        sAvionAtaque.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
     }
 
-    // Estructura para manejar las explosiones visuales
-    struct ExplosionVisual {
-        sf::Sprite sprite;
-        float frameTime; 
-        int currentFrame;
+    // === INICIAR MÚSICA ===
+    recursos.musicaFondo.play();
 
-        // Constructor necesario para SFML 3 (Sprite no tiene constructor vacío)
-        ExplosionVisual(const sf::Texture& texture) : sprite(texture) {
-            frameTime = 0.f;
-            currentFrame = 0;
-            
-            // Ajustar origen al centro y escala
-            sf::FloatRect bounds = sprite.getLocalBounds();
-            sprite.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
-            sprite.setScale({1.0f, 1.0f}); // Ajusta este valor si es muy grande/pequeña
-        }
-    };
-    
-    std::vector<ExplosionVisual> explosionesActivas;
+    // === BOTONES ===
+    Boton btnAtacar(recursos.font, "ATACAR", {200, 50, 50});
+    Boton btnMover(recursos.font, "MOVER", {50, 150, 50});
+    Boton btnRadar(recursos.font, "RADAR", sf::Color(60, 70, 80));
+    btnRadar.setPosition({850.f, 20.f});
+    Boton btnNotas(recursos.font, "NOTAS", sf::Color(139, 100, 60));
+    btnNotas.setPosition({730.f, 20.f});
 
-    // >>> NUEVO: CARGAR ANIMACION DE FUEGO <<<
-    std::vector<sf::Texture> animFuegoTex(7); // Son 7 frames (0-6)
-    for (int i = 0; i < 7; ++i) {
-        if (!animFuegoTex[i].loadFromFile("assets/animations/fuego/" + std::to_string(i) + ".png")) {
-            std::cerr << "Error cargando frame fuego " << i << std::endl;
-        }
-    }
-
-    // Estructura para el fuego (persistente y cíclico)
-    struct FuegoVisual {
-        sf::Sprite sprite;
-        float frameTime;
-        int currentFrame;
-
-        FuegoVisual(const sf::Texture& texture, sf::Vector2f pos) : sprite(texture) {
-            sprite.setPosition(pos);
-            sf::FloatRect bounds = sprite.getLocalBounds();
-            sprite.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
-            
-            // DESINCRONIZACIÓN:
-            // Iniciamos en un frame aleatorio para que no se muevan todos igual
-            currentFrame = std::rand() % 7; 
-            frameTime = 0.f;
-            
-            // Variación aleatoria de tamaño para más naturalidad
-            float escala = 1.0f + static_cast<float>(std::rand() % 5) / 10.0f; // 1.0 a 1.5
-            sprite.setScale({escala, escala});
-        }
-    };
-    
-    std::vector<FuegoVisual> fuegosActivos;
-
-    // >>> NUEVO: ESTRUCTURA PARA FUEGOS ARTIFICIALES (PARTICULAS) <<<
-    // ESTRUCTURA PARA FUEGOS ARTIFICIALES (PARTICULAS ANIMADAS)
-    struct Particula {
-        sf::Vector2f pos;
-        sf::Vector2f vel;
-        float vida;      // 1.0 -> 0.0
-        sf::Color color;
-        
-        // >>> NUEVAS PROPIEDADES DE ANIMACION <<<
-        float angulo;      // Rotación actual
-        float velAngulo;   // Velocidad de giro
-        float escala;      // Tamaño actual
-
-        Particula(sf::Vector2f p, sf::Color c) : pos(p), color(c) {
-            vida = 1.0f;
-            escala = 1.0f;
-            
-            // Física de explosión
-            float a = (std::rand() % 360) * 3.14159f / 180.f;
-            float v = (std::rand() % 60 + 40) / 10.f; // Velocidad 4.0 a 10.0
-            vel = { std::cos(a) * v, std::sin(a) * v };
-
-            // Datos de animación aleatorios para cada chispa
-            angulo = static_cast<float>(std::rand() % 360);
-            velAngulo = static_cast<float>((std::rand() % 200) - 100); // Giro izq o der
-        }
-    };
-    std::vector<Particula> sistemaParticulas;
-
-    // --- UI DEL MENU ---
-    // Fondo oscuro
-    sf::RectangleShape fondoMenu({(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y});
-    fondoMenu.setFillColor(sf::Color(0, 0, 0, 200)); 
-
-    // Caja contenedora
-    sf::RectangleShape cajaMenu({500.f, 300.f});
-    cajaMenu.setOrigin({250.f, 150.f});
-    cajaMenu.setPosition({(float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f});
-    cajaMenu.setFillColor(sf::Color(40, 44, 52));
-    cajaMenu.setOutlineThickness(3.f);
-    cajaMenu.setOutlineColor(sf::Color(0, 255, 100)); // Verde tech
-
-    // Título
-    sf::Text txtMenuTitulo(font);
-    txtMenuTitulo.setString("CONFIGURACION DE SISTEMAS");
-    txtMenuTitulo.setCharacterSize(28);
-    txtMenuTitulo.setFillColor(sf::Color::White);
-    sf::FloatRect tb = txtMenuTitulo.getLocalBounds();
-    txtMenuTitulo.setOrigin({tb.size.x/2.f, tb.size.y/2.f});
-    txtMenuTitulo.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y - 110.f});
-
-    // --- ELEMENTOS FILA 1: MUSICA ---
-    sf::Text lblMusica(font, "MUSICA (BGM)", 20);
-    lblMusica.setPosition({cajaMenu.getPosition().x - 200.f, cajaMenu.getPosition().y - 50.f});
-    
-    sf::Text btnMenosMusica(font, "<", 30); // Botón visual izquierdo
-    btnMenosMusica.setPosition({cajaMenu.getPosition().x + 20.f, cajaMenu.getPosition().y - 60.f});
-    
-    sf::RectangleShape barraMusicaBg({100.f, 10.f});
-    barraMusicaBg.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y - 40.f});
-    barraMusicaBg.setFillColor(sf::Color(20, 20, 20));
-    
-    sf::RectangleShape barraMusicaFill({50.f, 10.f}); // Ancho dinámico
-    barraMusicaFill.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y - 40.f});
-    barraMusicaFill.setFillColor(sf::Color::Cyan);
-
-    sf::Text btnMasMusica(font, ">", 30); // Botón visual derecho
-    btnMasMusica.setPosition({cajaMenu.getPosition().x + 160.f, cajaMenu.getPosition().y - 60.f});
-
-    sf::Text valMusicaTxt(font, "50%", 20);
-    valMusicaTxt.setPosition({cajaMenu.getPosition().x + 190.f, cajaMenu.getPosition().y - 50.f});
-
-    // --- ELEMENTOS FILA 2: EFECTOS ---
-    sf::Text lblEfectos(font, "EFECTOS (SFX)", 20);
-    lblEfectos.setPosition({cajaMenu.getPosition().x - 200.f, cajaMenu.getPosition().y + 20.f});
-
-    sf::Text btnMenosEfectos(font, "<", 30);
-    btnMenosEfectos.setPosition({cajaMenu.getPosition().x + 20.f, cajaMenu.getPosition().y + 10.f});
-
-    sf::RectangleShape barraEfectosBg({100.f, 10.f});
-    barraEfectosBg.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y + 30.f});
-    barraEfectosBg.setFillColor(sf::Color(20, 20, 20));
-
-    sf::RectangleShape barraEfectosFill({50.f, 10.f});
-    barraEfectosFill.setPosition({cajaMenu.getPosition().x + 50.f, cajaMenu.getPosition().y + 30.f});
-    barraEfectosFill.setFillColor(sf::Color::Yellow);
-
-    sf::Text btnMasEfectos(font, ">", 30);
-    btnMasEfectos.setPosition({cajaMenu.getPosition().x + 160.f, cajaMenu.getPosition().y + 10.f});
-
-    sf::Text valEfectosTxt(font, "50%", 20);
-    valEfectosTxt.setPosition({cajaMenu.getPosition().x + 190.f, cajaMenu.getPosition().y + 20.f});
-
-    // Instrucciones pie de pagina
-    sf::Text txtInstruccionesVol(font, "ARRIBA/ABAJO: Seleccionar  |  IZQ/DER: Ajustar  |  ESC: Volver", 14);
-    txtInstruccionesVol.setFillColor(sf::Color(150, 150, 150));
-    sf::FloatRect ib = txtInstruccionesVol.getLocalBounds();
-    txtInstruccionesVol.setOrigin({ib.size.x/2.f, ib.size.y/2.f});
-    txtInstruccionesVol.setPosition({cajaMenu.getPosition().x, cajaMenu.getPosition().y + 110.f});
-
-   // BOTÓN SALIR EN EL MENÚ DE PAUSA
-    Boton btnSalirMenu(font, "SALIR AL MENU", {250, 50, 50});
-    // Posiciónalo debajo de las opciones de volumen (ajusta Y según tu gusto)
-    btnSalirMenu.setPosition({(float)WINDOW_SIZE.x / 2.f - 125.f, (float)WINDOW_SIZE.y / 2.f + 80.f});
-
-    // Texto de Victoria
-    // --- JUGADORES ---
-    Jugador p1(1, {0.f, 0.f});
-    Jugador p2(2, {700.f, 0.f});
-
-    GeneradorFlotas::inicializarFlota(p1, tDest, tPort, tSub);
-    GeneradorFlotas::inicializarFlota(p2, tDest, tPort, tSub);
-
-    // --- ZONAS ---
-    sf::FloatRect zonaIzquierda({0.f, 0.f}, {500.f, 700.f});
-    sf::FloatRect zonaDerecha({500.f, 0.f}, {500.f, 700.f});
-
-    // --- UI ---
-    Boton btnAtacar(font, "ATACAR", {200, 50, 50});
-    Boton btnMover(font, "MOVER", {50, 150, 50});
-    Boton btnRadar(font, "RADAR", sf::Color(60, 70, 80)); 
-    btnRadar.setPosition({850.f, 20.f}); 
-    Boton btnNotas(font, "NOTAS", sf::Color(139, 100, 60)); 
-    btnNotas.setPosition({730.f, 20.f}); 
-
-    sf::Text txtInfo(font);
+    sf::Text txtInfo(recursos.font);
     txtInfo.setCharacterSize(20);
     txtInfo.setOutlineThickness(2.f);
     txtInfo.setFillColor(sf::Color::Yellow);
     txtInfo.setPosition({350.f, 20.f});
 
-    // ==========================================
-    // >>> RECURSOS ESTÉTICOS (RADAR Y NOTAS) <<<
-    // ==========================================
-    const sf::Vector2f radarCenter((float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y / 2.f);
-    const sf::Color neonGreen(0, 255, 100);
-    const sf::Color neonRed(255, 50, 50);
+    // === ZONAS DE ATAQUE ===
+    InputHandler::MapZones zonas;
 
-    sf::VertexArray radarBg(sf::PrimitiveType::TriangleStrip, 4);
-    radarBg[0] = sf::Vertex{{0.f, 0.f}, sf::Color::Black};
-    radarBg[1] = sf::Vertex{{(float)WINDOW_SIZE.x, 0.f}, sf::Color::Black};
-    radarBg[2] = sf::Vertex{{0.f, (float)WINDOW_SIZE.y}, sf::Color(10, 25, 40)}; 
-    radarBg[3] = sf::Vertex{{(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y}, sf::Color(10, 25, 40)};
+    // === JUGADORES ===
+    Jugador p1(1, {0.f, 0.f});
+    Jugador p2(2, {700.f, 0.f});
 
-    std::vector<sf::CircleShape> radarCircles;
-    for (int i = 1; i <= 4; ++i) {
-        float r = i * 120.f; 
-        sf::CircleShape c(r);
-        c.setOrigin({r, r});
-        c.setPosition(radarCenter);
-        c.setFillColor(sf::Color::Transparent);
-        c.setOutlineThickness(1.f);
-        c.setOutlineColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 60));
-        radarCircles.push_back(c);
-    }
-    
-    sf::RectangleShape axisX({(float)WINDOW_SIZE.x, 1.f});
-    axisX.setPosition({0.f, radarCenter.y});
-    axisX.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
-    
-    sf::RectangleShape axisY({1.f, (float)WINDOW_SIZE.y});
-    axisY.setPosition({radarCenter.x, 0.f});
-    axisY.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
+    GeneradorFlotas::inicializarFlota(p1, recursos.tDest, recursos.tPort, recursos.tSub);
+    GeneradorFlotas::inicializarFlota(p2, recursos.tDest, recursos.tPort, recursos.tSub);
 
-    float radarSweepAngle = 0.f;
-    float largoLinea = radarCircles.back().getRadius() + 100.f;
-    sf::RectangleShape sweepLine({largoLinea, 2.f});
-    sweepLine.setOrigin({0.f, 1.f}); 
-    sweepLine.setPosition(radarCenter);
-    sweepLine.setFillColor(neonGreen);
-    
-    sf::RectangleShape sweepGlow({largoLinea, 15.f});
-    sweepGlow.setOrigin({0.f, 7.5f});
-    sweepGlow.setPosition(radarCenter);
-    sweepGlow.setFillColor(sf::Color(neonGreen.r, neonGreen.g, neonGreen.b, 30));
-
-    // Fondo NOTAS
-    sf::Color papelClaro(245, 235, 200); 
-    sf::Color papelOscuro(100, 70, 40);  
-
-    sf::VertexArray fondoNotas(sf::PrimitiveType::TriangleFan, 6);
-    fondoNotas[0] = sf::Vertex{radarCenter, papelClaro};
-    fondoNotas[1] = sf::Vertex{{0.f, 0.f}, papelOscuro};
-    fondoNotas[2] = sf::Vertex{{(float)WINDOW_SIZE.x, 0.f}, papelOscuro};
-    fondoNotas[3] = sf::Vertex{{(float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y}, papelOscuro};
-    fondoNotas[4] = sf::Vertex{{0.f, (float)WINDOW_SIZE.y}, papelOscuro};
-    fondoNotas[5] = sf::Vertex{{0.f, 0.f}, papelOscuro}; 
-
-    std::vector<sf::RectangleShape> lineasCuaderno;
-    for(float y = 80.f; y < WINDOW_SIZE.y; y += 40.f) {
-        sf::RectangleShape linea({(float)WINDOW_SIZE.x, 1.f});
-        linea.setPosition({0.f, y});
-        linea.setFillColor(sf::Color(0, 0, 0, 40)); 
-        lineasCuaderno.push_back(linea);
-    }
-
-    sf::RectangleShape flechaPalo({25.f, 6.f});
-    flechaPalo.setFillColor(sf::Color::Black);
-    flechaPalo.setOrigin({0.f, 3.f});
-    sf::CircleShape flechaPunta(10.f, 3); 
-    flechaPunta.setFillColor(sf::Color::Black);
-    flechaPunta.setOrigin({10.f, 10.f});
-    flechaPunta.setRotation(sf::degrees(-90)); 
-    // ==========================================
-
-    EstadoJuego estado = MENSAJE_P1;
-    int sel = -1;
-    bool moviendo = false;
-    bool apuntando = false;
-    
-    bool modoRadar = false;
-    bool modoNotas = false; 
-    bool lanzandoUAV = false;
-    bool lanzandoUAVRefuerzo = false; 
-    float errorTimer = 0.f;
-    sf::String msgError = "";
-    
+    // === TIMERS ===
     sf::Clock uavTimer;
+    sf::Clock timerAtaqueAereo;
+    sf::Clock dtClock;
 
-    bool cargandoDisparo = false;
-    float potenciaActual = 0.f;
+    // === VARIABLES PARA ATAQUES ===
+    sf::Vector2f posAvionAtaque;
+    float colObjetivoX = 0.f;
+    const float velocidadAvion = 4.0f;
     const float VELOCIDAD_CARGA = 5.0f;
     const float MAX_DISTANCIA = 1500.f;
 
-    bool enZonaEnemiga = false;
-    sf::Vector2f origenDisparoReal(0,0); 
-
-    // --- VARIABLES AIR STRIKE ---
-    // 0 = Inactivo, 1 = Espera en cubierta, 2 = Volando
-    int faseAtaqueAereo = 0; 
-    sf::Clock timerAtaqueAereo;
-    sf::Vector2f posAvionAtaque;
-    float colObjetivoX = 0.f;
-    float velocidadAvion = 4.0f; // Más lento
-
-    sf::Clock dtClock;
-
+    // === CICLO PRINCIPAL ===
     while (window.isOpen()) {
         float deltaTime = dtClock.restart().asSeconds();
-        if (errorTimer > 0.f) errorTimer -= deltaTime;
 
+        // Actualizar referencias de jugadores
         Jugador* jugadorActual = nullptr;
         Jugador* jugadorEnemigo = nullptr;
-        sf::FloatRect* zonaObjetivo = nullptr;
 
-        if (estado == TURNO_P1) {
-            jugadorActual = &p1; jugadorEnemigo = &p2;
-        } else if (estado == TURNO_P2) {
-            jugadorActual = &p2; jugadorEnemigo = &p1;
+        if (gameState.estado == TURNO_P1) {
+            jugadorActual = &p1;
+            jugadorEnemigo = &p2;
+        } else if (gameState.estado == TURNO_P2) {
+            jugadorActual = &p2;
+            jugadorEnemigo = &p1;
         }
 
-        if (sel != -1 && jugadorActual) {
-            float barcoX = jugadorActual->getFlota()[sel].sprite.getPosition().x;
-            if (barcoX < 500.f) zonaObjetivo = &zonaDerecha;
-            else zonaObjetivo = &zonaIzquierda;
-        } else {
-            zonaObjetivo = (estado == TURNO_P1) ? &zonaDerecha : &zonaIzquierda;
-        }
-
+        // === PROCESAMIENTO DE EVENTOS ===
         while (const auto ev = window.pollEvent()) {
             if (ev->is<sf::Event::Closed>()) window.close();
-            // --- CONTROL DEL MENU ---
+
             if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
-                if (k->code == sf::Keyboard::Key::Escape) {
-                    if (idGanador != 0) {
+                if (gameState.juegoPausado) {
+                    // Procesar cualquier tecla del menú
+                    InputHandler::procesarMenuPausa(k, gameState, recursos, recursos.musicaFondo);
+                } else if (k->code == sf::Keyboard::Key::Escape) {
+                    if (gameState.idGanador != 0) {
                         ejecutarLauncher(window);
                         return 0;
                     }
-                    // Si hay una acción en juego, cancelarla primero
-                    if (cargandoDisparo || apuntando || moviendo || sel != -1 || modoRadar || modoNotas || faseAtaqueAereo > 0) {
-                        cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
-                        modoRadar = false; modoNotas = false; faseAtaqueAereo = 0;
-                        lanzandoUAV = false; lanzandoUAVRefuerzo = false;
-                        btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
-                        sRadar.stop(); 
-                        sUAV.stop();
-                        sAirStrike.stop();
-                        sShotFail.stop(); sShotDone.stop(); sNotas.stop(); sError.stop();
-                    } 
-                    else {
-                        // Alternar pausa
-                        juegoPausado = !juegoPausado;
-                    }
-                }
-
-                // CONTROLES DENTRO DEL MENU
-                if (juegoPausado) {
-                    // Navegar entre opciones (Musica vs Efectos)
-                    if (k->code == sf::Keyboard::Key::Up || k->code == sf::Keyboard::Key::Down) {
-                        sButton.play();
-                        opcionMenuSeleccionada = (opcionMenuSeleccionada == 0) ? 1 : 0;
-                    }
-
-                    // Ajustar valores
-                    if (k->code == sf::Keyboard::Key::Left) {
-                        sButton.play();
-                        if (opcionMenuSeleccionada == 0) { // Musica
-                            volMusica -= 5.f;
-                            if (volMusica < 0.f) volMusica = 0.f;
-                            musicaFondo.setVolume(volMusica);
-                        } else { // Efectos
-                            volEfectos -= 5.f;
-                            if (volEfectos < 0.f) volEfectos = 0.f;
-                            // Aquí actualizarías el volumen de tus efectos futuros
-                            sRadar.setVolume(volEfectos);
-                            sUAV.setVolume(volEfectos);
-                            sButton.setVolume(volEfectos);
-                            sAirStrike.setVolume(volEfectos);
-
-                            sNotas.setVolume(volEfectos);
-                            sError.setVolume(volEfectos);
-                            sShotFail.setVolume(volEfectos);
-                            sShotDone.setVolume(volEfectos);
-                            sDestruccion.setVolume(volEfectos);
-                        }
-                    }
-                    else if (k->code == sf::Keyboard::Key::Right) {
-                        sButton.play();
-                        if (opcionMenuSeleccionada == 0) { // Musica
-                            volMusica += 5.f;
-                            if (volMusica > 100.f) volMusica = 100.f;
-                            musicaFondo.setVolume(volMusica);
-                        } else { // Efectos
-                            volEfectos += 5.f;
-                            if (volEfectos > 100.f) volEfectos = 100.f;
-                            sRadar.setVolume(volEfectos);
-                            sUAV.setVolume(volEfectos);
-                            sButton.setVolume(volEfectos);
-                            sAirStrike.setVolume(volEfectos);
-
-                            sNotas.setVolume(volEfectos);
-                            sError.setVolume(volEfectos);
-                            sShotFail.setVolume(volEfectos);
-                            sShotDone.setVolume(volEfectos);
-                            sDestruccion.setVolume(volEfectos);
-                        }
-                    }
+                    InputHandler::procesarEscape(gameState, recursos, btnAtacar, btnMover, btnRadar, btnNotas);
                 }
             }
 
-            // SI EL JUEGO ESTA PAUSADO, IGNORAR CLICKS
-            if (juegoPausado) continue;
+            // Ignorar clicks si pausa o animación en curso
+            if (gameState.juegoPausado) continue;
+            if (gameState.lanzandoUAV || gameState.lanzandoUAVRefuerzo || gameState.faseAtaqueAereo > 0 ||
+                gameState.faseDisparoNormal > 0 || gameState.idGanador != 0 || gameState.ganadorDetectado != 0) {
+                continue;
+            }
 
-            // SI EL JUEGO ESTA PAUSADO, IGNORAR RESTO DE INPUTS (CLICKS)
-            if (juegoPausado) continue;
-
-            if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
+            // === PANTALLA DE MENSAJES (TRANSICIÓN DE TURNO) ===
+            if (gameState.estado == MENSAJE_P1 || gameState.estado == MENSAJE_P2) {
                 if (ev->is<sf::Event::MouseButtonPressed>() || ev->is<sf::Event::KeyPressed>()) {
-                    EstadoJuego siguienteEstado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
+                    EstadoJuego siguienteEstado = (gameState.estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
                     Jugador* siguienteJugador = (siguienteEstado == TURNO_P1) ? &p1 : &p2;
 
-                    // 1. Limpiar fuegos del turno anterior
+                    // Limpiar fuegos del turno anterior
                     fuegosActivos.clear();
 
-                    // 2. Si el jugador que entra tiene una zona bombardeada, generar fuego
+                    // Generar fuego si hay zona bombardeada
                     if (siguienteJugador->columnaFuegoX > 0.f) {
-                        
-                        // AUMENTAMOS LA CANTIDAD Y DISTRIBUIMOS POR TRAMOS
-                        int cantidadFuego = 40; // Más llamas para que se vea denso
-                        float alturaTramo = (float)WINDOW_SIZE.y / cantidadFuego; // Altura de cada "escalón"
+                        int cantidadFuego = 40;
+                        float alturaTramo = (float)WINDOW_SIZE.y / cantidadFuego;
                         
                         for (int i = 0; i < cantidadFuego; ++i) {
-                            // En lugar de una Y totalmente aleatoria, vamos bajando paso a paso
                             float yBase = i * alturaTramo;
-                            // Aleatoriedad solo dentro de su tramo para que no parezca una cuadrícula perfecta
                             float variacionY = static_cast<float>(std::rand() % (int)alturaTramo);
-                            
                             float yFinal = yBase + variacionY;
+                            float offsetX = (std::rand() % 50) - 25.f;
                             
-                            // Variación horizontal
-                            float offsetX = (std::rand() % 50) - 25.f; 
-                            sf::Vector2f pos = { siguienteJugador->columnaFuegoX + offsetX, yFinal };
-
-                            // Crear y guardar
-                            FuegoVisual fuego(animFuegoTex[0], pos); 
-                            
-                            // Asignar textura del frame inicial (importante para que no empiecen todas igual)
-                            fuego.sprite.setTexture(animFuegoTex[fuego.currentFrame]);
-                            
+                            sf::Vector2f pos = {siguienteJugador->columnaFuegoX + offsetX, yFinal};
+                            AnimationSystem::FuegoVisual fuego(recursos.animFuegoTex[0], pos);
+                            fuego.sprite.setTexture(recursos.animFuegoTex[fuego.currentFrame]);
                             fuegosActivos.push_back(fuego);
                         }
                     }
 
-                    if (siguienteJugador && !siguienteJugador->explosionesPendientes.empty()) {
-            
-                        sDestruccion.play();
-
-                        // >>> CORRECCIÓN AQUÍ: Usar 'siguienteJugador' <<<
-                        for (const auto& pos : siguienteJugador->explosionesPendientes) { //
-                            
-                            ExplosionVisual ex(animExplosionTex[0]);
-                            
+                    // Procesar explosiones pendientes
+                    if (!siguienteJugador->explosionesPendientes.empty()) {
+                        recursos.sDestruccion.play();
+                        
+                        for (const auto& pos : siguienteJugador->explosionesPendientes) {
+                            AnimationSystem::ExplosionVisual ex(recursos.animExplosionTex[0]);
                             sf::FloatRect bounds = ex.sprite.getLocalBounds();
                             ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
                             ex.sprite.setPosition(pos);
-                            ex.sprite.setScale({1.0f, 1.0f}); 
-                            
+                            ex.sprite.setScale({1.0f, 1.0f});
                             explosionesActivas.push_back(ex);
                         }
-
-                        // Limpiar la lista del jugador correcto
                         siguienteJugador->explosionesPendientes.clear();
                     }
 
-                    if (verificarVictoria(*siguienteJugador)) {
-                        // Si el jugador que empieza el turno no tiene barcos, ganó el OTRO.
-                        // Si es turno de P1 (id 1), gana P2 (id 2), y viceversa.
-                        ganadorDetectado = (siguienteJugador->id == 1) ? 2 : 1;
-                        
-                        // Tiempo de espera para ver las explosiones (ej. 4 segundos)
-                        timerVictoria = 4.0f; 
+                    // Verificar victoria
+                    if (GameState::verificarVictoria(*siguienteJugador)) {
+                        gameState.ganadorDetectado = (siguienteJugador->id == 1) ? 2 : 1;
+                        gameState.timerVictoria = 4.0f;
                     }
+
                     // Reducir cooldowns
                     if (siguienteJugador->cooldownRadar > 0) siguienteJugador->cooldownRadar--;
                     if (siguienteJugador->cooldownAtaqueAereo > 0) siguienteJugador->cooldownAtaqueAereo--;
-                    
-                    // Limpiar la franja roja del jugador anterior (ya pasó su turno de verla)
-                    Jugador* jugadorAnterior = (siguienteEstado == TURNO_P1) ? &p2 : &p1;
-                    jugadorAnterior->columnaFuegoX = -1.f; 
 
+                    // Limpiar franja roja del jugador anterior
+                    Jugador* jugadorAnterior = (siguienteEstado == TURNO_P1) ? &p2 : &p1;
+                    jugadorAnterior->columnaFuegoX = -1.f;
+
+                    // Manejar refuerzo de UAV pendiente
                     if (siguienteJugador->radarRefuerzoPendiente) {
-                        lanzandoUAVRefuerzo = true;
-                        sUAV.play();
-                        siguienteJugador->radarRefuerzoPendiente = false; 
-                        siguienteJugador->cooldownRadar = 2; 
+                        gameState.lanzandoUAVRefuerzo = true;
+                        recursos.sUAV.play();
+                        siguienteJugador->radarRefuerzoPendiente = false;
+                        siguienteJugador->cooldownRadar = 2;
                         
-                        sf::Vector2f posInicio = { (float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y + 100.f };
-                        if (uavLoaded) {
+                        sf::Vector2f posInicio = {(float)WINDOW_SIZE.x / 2.f, (float)WINDOW_SIZE.y + 100.f};
+                        if (recursos.uavLoaded) {
                             uavSprite.setPosition(posInicio);
                             uavSprite.setRotation(sf::degrees(0));
                             uavSprite.setScale({0.15f, 0.15f});
@@ -694,39 +228,43 @@ int main() {
                         }
                     }
 
-                    estado = siguienteEstado;
-                    sel = -1; moviendo = false; apuntando = false; cargandoDisparo = false;
-                    modoRadar = false; modoNotas = false; lanzandoUAV = false; 
-                    errorTimer = 0.f;
-                    btnMover.resetColor(); btnAtacar.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
+                    gameState.estado = siguienteEstado;
+                    gameState.sel = -1;
+                    gameState.moviendo = false;
+                    gameState.apuntando = false;
+                    gameState.cargandoDisparo = false;
+                    gameState.modoRadar = false;
+                    gameState.modoNotas = false;
+                    gameState.lanzandoUAV = false;
+                    // NO resetear lanzandoUAVRefuerzo aquí - se maneja en la lógica de animación
+                    gameState.errorTimer = 0.f;
+                    btnMover.resetColor();
+                    btnAtacar.resetColor();
+                    btnRadar.resetColor();
+                    btnNotas.resetColor();
+                    continue;
                 }
                 continue;
             }
 
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
-            // Bloquear input durante animaciones
-            if (lanzandoUAV || lanzandoUAVRefuerzo || faseAtaqueAereo > 0 || faseDisparoNormal > 0 || idGanador != 0 || ganadorDetectado != 0) continue;
-
             if (const auto* m = ev->getIf<sf::Event::MouseButtonPressed>()) {
                 if (m->button == sf::Mouse::Button::Left) {
                     
-                    if (!apuntando && !cargandoDisparo && jugadorActual) {
-                        
-                        // --- BOTON RADAR ---
-                        if (btnRadar.esClickeado(mousePos) && !modoNotas) {
-                            sButton.play();
-                            if (!modoRadar) {
+                    if (!gameState.apuntando && !gameState.cargandoDisparo && jugadorActual) {
+                        // Botón RADAR
+                        if (btnRadar.esClickeado(mousePos) && !gameState.modoNotas) {
+                            recursos.sButton.play();
+                            if (!gameState.modoRadar) {
                                 if (jugadorActual->radarRefuerzoPendiente) {
-                                    msgError = "SOLICITUD EN PROCESO. REFUERZOS LLEGAN SIGUIENTE TURNO.";
-                                    errorTimer = 2.0f;
-                                }
-                                else if (jugadorActual->cooldownRadar > 0) {
-                                    msgError = "SISTEMA ENFRIANDOSE. ESPERA " + std::to_string(jugadorActual->cooldownRadar) + " TURNO(S).";
-                                    sError.play();
-                                    errorTimer = 2.0f;
-                                }
-                                else {
+                                    gameState.msgError = "SOLICITUD EN PROCESO. REFUERZOS LLEGAN SIGUIENTE TURNO.";
+                                    gameState.errorTimer = 2.0f;
+                                } else if (jugadorActual->cooldownRadar > 0) {
+                                    gameState.msgError = "SISTEMA ENFRIANDOSE. ESPERA " + std::to_string(jugadorActual->cooldownRadar) + " TURNO(S).";
+                                    recursos.sError.play();
+                                    gameState.errorTimer = 2.0f;
+                                } else {
                                     bool carrierFound = false;
                                     sf::Vector2f posInicio;
                                     for (const auto& barco : jugadorActual->getFlota()) {
@@ -737,529 +275,341 @@ int main() {
                                             break;
                                         }
                                     }
-                                    
+
                                     if (carrierFound) {
-                                        if (uavLoaded) {
+                                        if (recursos.uavLoaded) {
                                             uavSprite.setPosition(posInicio);
                                             uavSprite.setRotation(sf::degrees(0));
-                                            uavSprite.setScale({0.05f, 0.05f}); 
+                                            uavSprite.setScale({0.05f, 0.05f});
                                         } else {
                                             uavShapeFallback.setPosition(posInicio);
                                         }
-                                        lanzandoUAV = true;
-                                        sUAV.play();
+                                        gameState.lanzandoUAV = true;
+                                        recursos.sUAV.play();
                                         uavTimer.restart();
-                                        jugadorActual->cooldownRadar = 2; 
-                                        
+                                        jugadorActual->cooldownRadar = 2;
                                         btnRadar.setColor(sf::Color::Red);
-                                        sel = -1; moviendo = false; 
-                                    } 
-                                    else {
+                                        gameState.sel = -1;
+                                        gameState.moviendo = false;
+                                    } else {
                                         jugadorActual->radarRefuerzoPendiente = true;
-                                        msgError = "PORTAVIONES CAIDO. REFUERZOS LLEGAN EL PROXIMO TURNO.";
-                                        errorTimer = 3.0f;
+                                        gameState.msgError = "PORTAVIONES CAIDO. REFUERZOS LLEGAN EL PROXIMO TURNO.";
+                                        gameState.errorTimer = 3.0f;
                                     }
                                 }
-                            } 
-                            else {
-                                modoRadar = false;
+                            } else {
+                                gameState.modoRadar = false;
                                 btnRadar.resetColor();
-                                sRadar.stop();
+                                recursos.sRadar.stop();
                             }
                         }
-
-                        // --- BOTON NOTAS ---
-                        else if (btnNotas.esClickeado(mousePos) && !modoRadar) {
-                            sButton.play();
-                            sNotas.play();
-                            modoNotas = !modoNotas;
-                            if (modoNotas) {
-                                btnNotas.setColor(sf::Color::White); 
-                                sel = -1; moviendo = false; 
+                        // Botón NOTAS
+                        else if (btnNotas.esClickeado(mousePos) && !gameState.modoRadar) {
+                            recursos.sButton.play();
+                            recursos.sNotas.play();
+                            gameState.modoNotas = !gameState.modoNotas;
+                            if (gameState.modoNotas) {
+                                btnNotas.setColor(sf::Color::White);
+                                gameState.sel = -1;
+                                gameState.moviendo = false;
                             } else {
                                 btnNotas.resetColor();
                             }
                         }
                     }
 
-                    if (modoRadar || modoNotas) continue; 
+                    if (gameState.modoRadar || gameState.modoNotas) continue;
 
-                    // JUEGO NORMAL
-                    if (apuntando && sel != -1) {
-                        cargandoDisparo = true;
-                        potenciaActual = 0.f;
+                    // MODO NORMAL
+                    if (gameState.apuntando && gameState.sel != -1) {
+                        gameState.cargandoDisparo = true;
+                        gameState.potenciaActual = 0.f;
                     }
-                    
-                    if (!apuntando && !cargandoDisparo) {
-                        if (sel != -1) {
-                            // CLICK EN BOTONES DEL BARCO
+
+                    if (!gameState.apuntando && !gameState.cargandoDisparo) {
+                        if (gameState.sel != -1) {
+                            // Botón ATACAR
                             if (btnAtacar.esClickeado(mousePos)) {
-                                sButton.play();
-                                bool esPortaviones = (jugadorActual->getFlota()[sel].nombre.find("Portaviones") != std::string::npos);
+                                recursos.sButton.play();
+                                bool esPortaviones = (jugadorActual->getFlota()[gameState.sel].nombre.find("Portaviones") != std::string::npos);
                                 
                                 if (esPortaviones) {
-                                    // *** LOGICA AIR STRIKE ***
                                     if (jugadorActual->cooldownAtaqueAereo > 0) {
-                                        msgError = "ESCUADRON REPOSTANDO. ESPERA " + std::to_string(jugadorActual->cooldownAtaqueAereo) + " TURNO(S).";
-                                        sError.play();
-                                        errorTimer = 2.0f;
+                                        gameState.msgError = "ESCUADRON REPOSTANDO. ESPERA " + std::to_string(jugadorActual->cooldownAtaqueAereo) + " TURNO(S).";
+                                        recursos.sError.play();
+                                        gameState.errorTimer = 2.0f;
                                     } else {
-                                        // INICIAR ANIMACION (Sin flecha, directo)
-                                        faseAtaqueAereo = 1; // Fase 1: Espera
+                                        gameState.faseAtaqueAereo = 1;
                                         timerAtaqueAereo.restart();
-                                        sAirStrike.play();
+                                        recursos.sAirStrike.play();
                                         
-                                        auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
+                                        auto bounds = jugadorActual->getFlota()[gameState.sel].sprite.getGlobalBounds();
                                         sf::Vector2f centro = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
                                         posAvionAtaque = centro;
-                                        colObjetivoX = centro.x; // Columna fija
+                                        colObjetivoX = centro.x;
                                         
-                                        // Configurar sprite
-                                        if (avionLoaded) {
+                                        if (recursos.avionLoaded) {
                                             sAvionAtaque.setPosition(posAvionAtaque);
                                             sAvionAtaque.setScale({0.05f, 0.05f});
-                                            // Orientar hacia arriba o abajo según jugador
-                                            if (jugadorActual->id == 1) sAvionAtaque.setRotation(sf::degrees(0)); // P1 dispara derecha? No, mapa es lado a lado.
-                                            // Asumimos que disparan hacia el lado enemigo.
-                                            // P1 (izq) dispara derecha, P2 (der) dispara izquierda.
-                                            // Pero el código de disparo dice "arriba". Vamos a usar rotación estándar.
-                                            sAvionAtaque.setRotation(sf::degrees(0)); 
+                                            sAvionAtaque.setRotation(sf::degrees(0));
                                         }
                                         
-                                        jugadorActual->cooldownAtaqueAereo = 5; // COOLDOWN 5 TURNOS
+                                        jugadorActual->cooldownAtaqueAereo = 5;
                                         btnAtacar.setColor(sf::Color::Red);
-                                        sel = -1; // Deseleccionar
+                                        gameState.sel = -1;
                                     }
-                                } 
-                                else {
-                                    // *** LOGICA NORMAL ***
-                                    apuntando = true; moviendo = false;
-                                    btnAtacar.setColor({255, 69, 0}); btnMover.resetColor();
-                                }
-                            } 
-                            else if (btnMover.esClickeado(mousePos)) {
-                                sButton.play();
-                                if (moviendo) {
-                                    IndicatorManager::actualizarTurnos(*jugadorActual);
-                                    moviendo = false; sel = -1; btnMover.resetColor();
-                                    estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                                 } else {
-                                    moviendo = true; btnMover.setColor({255, 140, 0});
+                                    gameState.apuntando = true;
+                                    gameState.moviendo = false;
+                                    btnAtacar.setColor({255, 69, 0});
+                                    btnMover.resetColor();
+                                }
+                            }
+                            // Botón MOVER
+                            else if (btnMover.esClickeado(mousePos)) {
+                                recursos.sButton.play();
+                                gameState.moviendo = !gameState.moviendo;
+                                if (gameState.moviendo) {
+                                    btnMover.setColor({255, 140, 0});
+                                } else {
+                                    btnMover.resetColor();
                                 }
                             }
                         }
 
-                        // SELECCION DE BARCO
-                        if (!btnAtacar.esClickeado(mousePos) && !btnMover.esClickeado(mousePos) && 
-                            !btnRadar.esClickeado(mousePos) && !btnNotas.esClickeado(mousePos) && jugadorActual) {
-                            bool hit = false;
-                            auto& flota = jugadorActual->getFlota();
-                            for (size_t i = 0; i < flota.size(); ++i) {
-                                if (flota[i].destruido) continue;
-                                if (flota[i].sprite.getGlobalBounds().contains(mousePos)) {
-                                    sel = (int)i; hit = true; 
-                                    moviendo = false; apuntando = false; 
-                                    btnMover.resetColor(); btnAtacar.resetColor();
-                                    break;
-                                }
-                            }
-                            if (!hit && !moviendo) sel = -1;
-                        }
+                        // Seleccionar barco
+                        InputHandler::procesarSeleccionBarco(jugadorActual, mousePos, btnAtacar, btnMover, btnRadar, btnNotas, gameState);
                     }
                 }
             }
 
             if (const auto* m = ev->getIf<sf::Event::MouseButtonReleased>()) {
                 if (m->button == sf::Mouse::Button::Left) {
-                    if (cargandoDisparo && apuntando && sel != -1) {
-                        cargandoDisparo = false;
-                        sf::Vector2f diff = mousePos - origenDisparoReal;
+                    if (gameState.cargandoDisparo && gameState.apuntando && gameState.sel != -1) {
+                        gameState.cargandoDisparo = false;
+                        sf::Vector2f diff = mousePos - gameState.origenDisparoReal;
                         float angulo = std::atan2(diff.y, diff.x);
                         sf::Vector2f impacto;
-                        impacto.x = origenDisparoReal.x + std::cos(angulo) * potenciaActual;
-                        impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
+                        impacto.x = gameState.origenDisparoReal.x + std::cos(angulo) * gameState.potenciaActual;
+                        impacto.y = gameState.origenDisparoReal.y + std::sin(angulo) * gameState.potenciaActual;
 
-                    if (jugadorEnemigo) {
+                        if (jugadorEnemigo) {
                             std::vector<sf::Vector2f> bajas;
-                            // Ahora esto funcionará porque actualizamos el header
-                            bool acerto = AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo, bajas);
+                            bool acerto = AttackManager::procesarDisparo(impacto, gameState.origenDisparoReal, *jugadorEnemigo, bajas);
                             
-                            // >>> CAMBIO: SI HAY BAJAS, GUARDARLAS EN EL ENEMIGO (NO MOSTRAR AUN) <<<
                             if (!bajas.empty()) {
-                                for(const auto& pos : bajas) {
-                                    // Las guardamos en el buzon del enemigo
+                                for (const auto& pos : bajas) {
                                     jugadorEnemigo->explosionesPendientes.push_back(pos);
                                 }
                             }
                             
-                            // Solo reproducimos sonido de impacto o fallo (no de destrucción)
                             if (acerto) {
-                                sShotDone.play();
-                                sonidoDisparoActual = &sShotDone;
+                                recursos.sShotDone.play();
+                                audioState.sonidoDisparoActual = &recursos.sShotDone;
                             } else {
-                                sShotFail.play();
-                                sonidoDisparoActual = &sShotFail;
+                                recursos.sShotFail.play();
+                                audioState.sonidoDisparoActual = &recursos.sShotFail;
                             }
                             
-                            faseDisparoNormal = 1;
+                            gameState.faseDisparoNormal = 1;
                         }
                         IndicatorManager::actualizarTurnos(*jugadorActual);
-                        apuntando = false; sel = -1;
+                        gameState.apuntando = false;
+                        gameState.sel = -1;
                         btnAtacar.resetColor();
-                        
                     }
-                }
-            }
-
-            if (const auto* k = ev->getIf<sf::Event::KeyPressed>()) {
-                if (k->code == sf::Keyboard::Key::Escape) {
-                    if (idGanador != 0) {
-                        window.close();
-                        return 0;
-                    }
-                    cargandoDisparo = false; apuntando = false; moviendo = false; sel = -1; 
-                    modoRadar = false; modoNotas = false;
-                    lanzandoUAV = false; lanzandoUAVRefuerzo = false;
-                    faseAtaqueAereo = 0; // Cancelar si es posible
-                    sRadar.stop();
-                    btnAtacar.resetColor(); btnMover.resetColor(); btnRadar.resetColor(); btnNotas.resetColor();
                 }
             }
         }
 
-        // --- UPDATE ---
+        // === UPDATE ===
         
-        // ANIMACION UAV (RADAR)
-        if (lanzandoUAV) {
+        // Actualizar error timer
+        if (gameState.errorTimer > 0.f) gameState.errorTimer -= deltaTime;
+
+        // Animación UAV
+        if (gameState.lanzandoUAV) {
             if (uavTimer.getElapsedTime().asMilliseconds() > 500) {
-                if (uavLoaded) {
-                    uavSprite.move({0.f, -3.0f}); 
+                if (recursos.uavLoaded) {
+                    uavSprite.move({0.f, -3.0f});
                     sf::Vector2f scale = uavSprite.getScale();
                     if (scale.x < 0.15f) uavSprite.setScale({scale.x + 0.0005f, scale.y + 0.0005f});
                     if (uavSprite.getPosition().y < -50.f) {
-                        lanzandoUAV = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
-                        sRadar.play();
-                        sUAV.stop();
+                        gameState.lanzandoUAV = false;
+                        gameState.modoRadar = true;
+                        btnRadar.setColor(sf::Color::Red);
+                        recursos.sRadar.play();
+                        recursos.sUAV.stop();
                     }
                 } else {
                     uavShapeFallback.move({0.f, -3.0f});
                     if (uavShapeFallback.getPosition().y < -50.f) {
-                        lanzandoUAV = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
+                        gameState.lanzandoUAV = false;
+                        gameState.modoRadar = true;
+                        btnRadar.setColor(sf::Color::Red);
                     }
                 }
             }
-        }
-        else if (lanzandoUAVRefuerzo) {
-            if (uavLoaded) {
-                uavSprite.move({0.f, -5.0f}); 
+        } else if (gameState.lanzandoUAVRefuerzo) {
+            if (recursos.uavLoaded) {
+                uavSprite.move({0.f, -5.0f});
                 if (uavSprite.getPosition().y < -50.f) {
-                    lanzandoUAVRefuerzo = false; 
-                    modoRadar = true;
+                    gameState.lanzandoUAVRefuerzo = false;
+                    gameState.modoRadar = true;
                     btnRadar.setColor(sf::Color::Red);
-                    sRadar.play();
-                    sUAV.stop();
-                    
+                    recursos.sRadar.play();
+                    recursos.sUAV.stop();
                 }
             } else {
                 uavShapeFallback.move({0.f, -5.0f});
                 if (uavShapeFallback.getPosition().y < -50.f) {
-                    lanzandoUAVRefuerzo = false; modoRadar = true; btnRadar.setColor(sf::Color::Red);
-                    sRadar.play();
-                    sUAV.stop();
+                    gameState.lanzandoUAVRefuerzo = false;
+                    gameState.modoRadar = true;
+                    btnRadar.setColor(sf::Color::Red);
+                    recursos.sRadar.play();
+                    recursos.sUAV.stop();
                 }
             }
         }
-        // ANIMACION AIR STRIKE
-        else if (faseAtaqueAereo > 0) {
-            if (faseAtaqueAereo == 1) {
-                // Fase 1: Mantenerse en cubierta un momento
+
+        // Animación Air Strike
+        if (gameState.faseAtaqueAereo > 0) {
+            if (gameState.faseAtaqueAereo == 1) {
                 if (timerAtaqueAereo.getElapsedTime().asSeconds() > 1.0f) {
-                    faseAtaqueAereo = 2; // Pasar a volar
+                    gameState.faseAtaqueAereo = 2;
                 } else {
-                    // Pequeña vibración o escala
                     float scale = 0.05f + (std::sin(timerAtaqueAereo.getElapsedTime().asMilliseconds() * 0.01f) * 0.002f);
                     sAvionAtaque.setScale({scale, scale});
                 }
-            }
-            else if (faseAtaqueAereo == 2) {
-                // Fase 2: Vuelo Lento Vertical (hacia arriba, simulando salida)
-                // Ojo: En este juego la vista es lateral/arriba. Vamos a moverlo en Y negativo (arriba pantalla).
+            } else if (gameState.faseAtaqueAereo == 2) {
                 sAvionAtaque.move({0.f, -velocidadAvion});
                 
-                // Crecer efecto despegue
                 sf::Vector2f scale = sAvionAtaque.getScale();
                 if (scale.x < 0.25f) sAvionAtaque.setScale({scale.x + 0.001f, scale.y + 0.001f});
 
                 bool avionFuera = (sAvionAtaque.getPosition().y < -100.f);
-                bool sonidoTerminado = (sAirStrike.getStatus() == sf::Sound::Status::Stopped);
+                bool sonidoTerminado = (recursos.sAirStrike.getStatus() == sf::Sound::Status::Stopped);
 
                 if (avionFuera && sonidoTerminado) {
-                    
                     if (jugadorEnemigo) {
                         std::vector<sf::Vector2f> bajasAereas;
                         AttackManager::procesarAtaqueAereo(colObjetivoX, *jugadorEnemigo, bajasAereas);
-
-                        // >>> CAMBIO: GUARDAR BAJAS EN EL ENEMIGO <<<
+                        
                         if (!bajasAereas.empty()) {
-                            for(const auto& pos : bajasAereas) {
+                            for (const auto& pos : bajasAereas) {
                                 jugadorEnemigo->explosionesPendientes.push_back(pos);
                             }
                         }
                     }
                     
-                    // Finalizamos turno inmediatamente (la víctima verá el daño al empezar)
-                    faseAtaqueAereo = 0;
-
-                    
+                    gameState.faseAtaqueAereo = 0;
                     IndicatorManager::actualizarTurnos(*jugadorActual);
-                    estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
+                    gameState.estado = (gameState.estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                 }
             }
-        }else if (faseDisparoNormal == 1) {
-            // Verificar si el sonido terminó
-            if (sonidoDisparoActual && sonidoDisparoActual->getStatus() == sf::Sound::Status::Stopped) {
-                faseDisparoNormal = 0; 
-                sonidoDisparoActual = nullptr;
-
+        } else if (gameState.faseDisparoNormal == 1) {
+            if (audioState.sonidoDisparoActual && audioState.sonidoDisparoActual->getStatus() == sf::Sound::Status::Stopped) {
+                gameState.faseDisparoNormal = 0;
+                audioState.sonidoDisparoActual = nullptr;
                 IndicatorManager::actualizarTurnos(*jugadorActual);
-                estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
+                gameState.estado = (gameState.estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
             }
-        }
-        else if (!modoRadar && !modoNotas) {
-            offset[0] += 0.5f; offset[1] += 0.25f;
-            if (offset[0] >= (float)WINDOW_SIZE.x) offset[0] = 0; 
+        } else if (!gameState.modoRadar && !gameState.modoNotas) {
+            offset[0] += 0.5f;
+            offset[1] += 0.25f;
+            if (offset[0] >= (float)WINDOW_SIZE.x) offset[0] = 0;
             if (offset[1] >= (float)WINDOW_SIZE.y) offset[1] = 0;
             fondo.setTextureRect(sf::IntRect({(int)offset[0], (int)offset[1]}, {(int)WINDOW_SIZE.x, (int)WINDOW_SIZE.y}));
-        } 
-        else if (modoRadar) {
-            radarSweepAngle += 2.0f;
-            if (radarSweepAngle >= 360.f) radarSweepAngle -= 360.f;
-            sweepLine.setRotation(sf::degrees(radarSweepAngle));
-            sweepGlow.setRotation(sf::degrees(radarSweepAngle));
-        }
-
-        if (cargandoDisparo) {
-            potenciaActual += VELOCIDAD_CARGA;
-            if (potenciaActual > MAX_DISTANCIA) potenciaActual = MAX_DISTANCIA;
-        }
-
-        // >>> NUEVO: TEMPORIZADOR DE DRAMA VICTORIA <<<
-        if (ganadorDetectado != 0) {
-            timerVictoria -= deltaTime;
-            if (timerVictoria <= 0.f) {
-                // ¡Tiempo cumplido! Mostramos la pantalla oficial
-                idGanador = ganadorDetectado;
-                ganadorDetectado = 0; // Reseteamos para que no entre aquí de nuevo
-            }
-            
-        }
-
-        // 2. FUEGOS ARTIFICIALES (Se ejecutan cuando YA hay un ganador visible)
-        if (idGanador != 0) {
-            // A. Generar nuevas explosiones aleatoriamente
-            if (std::rand() % 20 == 0) { 
-                float x = static_cast<float>(std::rand() % WINDOW_SIZE.x);
-                float y = static_cast<float>(std::rand() % (WINDOW_SIZE.y / 2 + 100));
-                
-                std::vector<sf::Color> paleta = {
-                    sf::Color::Red, sf::Color::Green, sf::Color::Cyan, 
-                    sf::Color::Magenta, sf::Color::Yellow, sf::Color::White,
-                    sf::Color(255, 165, 0)
-                };
-                sf::Color colorExplosion = paleta[std::rand() % paleta.size()];
-
-                for (int i = 0; i < 50; ++i) {
-                    sistemaParticulas.emplace_back(sf::Vector2f(x, y), colorExplosion);
+        } else if (gameState.modoRadar && jugadorActual && jugadorEnemigo) {
+            // Recopilar datos del radar
+            jugadorActual->memoriaRadar.clear();
+            for (const auto& barco : jugadorEnemigo->getFlota()) {
+                if (!barco.destruido) {
+                    sf::FloatRect b = barco.sprite.getGlobalBounds();
+                    sf::Vector2f blipPos = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
+                    jugadorActual->memoriaRadar.push_back(blipPos);
                 }
             }
-
-            // B. Actualizar partículas existentes (ANIMACION)
-            for (size_t i = 0; i < sistemaParticulas.size(); ) {
-                // Movimiento
-                sistemaParticulas[i].pos += sistemaParticulas[i].vel;
-                sistemaParticulas[i].vel.y += 0.15f; // Gravedad
-                
-                // Animación (Giro y Envejecimiento)
-                sistemaParticulas[i].angulo += sistemaParticulas[i].velAngulo * deltaTime;
-                sistemaParticulas[i].vida -= deltaTime * 0.8f; 
-                
-                // Escala
-                sistemaParticulas[i].escala = sistemaParticulas[i].vida; 
-
-                if (sistemaParticulas[i].vida <= 0.f) {
-                    sistemaParticulas.erase(sistemaParticulas.begin() + i);
-                } else {
-                    ++i;
-                }
-            }
+            RenderSystem::actualizarRadar(radarVisuals, deltaTime);
         }
 
-        if (animOk) {
-            for (size_t i = 0; i < explosionesActivas.size(); ) {
-                explosionesActivas[i].frameTime += deltaTime;
-                
-                if (explosionesActivas[i].frameTime > 0.1f) { // Velocidad animación
-                    explosionesActivas[i].frameTime = 0.f;
-                    explosionesActivas[i].currentFrame++;
-                    
-                    if (explosionesActivas[i].currentFrame >= 6) {
-                        explosionesActivas.erase(explosionesActivas.begin() + i);
-                        continue;
-                    } else {
-                        explosionesActivas[i].sprite.setTexture(animExplosionTex[explosionesActivas[i].currentFrame]);
-                    }
-                }
-                ++i;
-            }
+        if (gameState.cargandoDisparo) {
+            gameState.potenciaActual += VELOCIDAD_CARGA;
+            if (gameState.potenciaActual > MAX_DISTANCIA) gameState.potenciaActual = MAX_DISTANCIA;
         }
 
-        // >>> NUEVO: UPDATE DE FUEGO <<<
-        for (auto& fuego : fuegosActivos) {
-            fuego.frameTime += deltaTime;
-            
-            if (fuego.frameTime > 0.1f) { // Velocidad de la animación
-                fuego.frameTime = 0.f;
-                fuego.currentFrame++;
-                
-                // BUCLE: Si pasa del último frame, volver al 0
-                if (fuego.currentFrame >= 7) {
-                    fuego.currentFrame = 0;
-                }
-                
-                fuego.sprite.setTexture(animFuegoTex[fuego.currentFrame]);
-            }
-        }
-        if (moviendo && sel != -1 && jugadorActual) {
-            auto& barco = jugadorActual->getFlota()[sel];
-            if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), sel, WINDOW_SIZE);
+        // Actualizar timer de victoria
+        GameState::actualizarVictoria(gameState, deltaTime);
+
+        // Actualizar animaciones
+        AnimationSystem::actualizarExplosiones(explosionesActivas, recursos.animExplosionTex, deltaTime, recursos.animOk);
+        AnimationSystem::actualizarFuegos(fuegosActivos, recursos.animFuegoTex, deltaTime);
+
+        if (gameState.idGanador != 0) {
+            AnimationSystem::generarExplosion(sistemaParticulas, WINDOW_SIZE);
+            AnimationSystem::actualizarParticulas(sistemaParticulas, deltaTime);
         }
 
-        if (sel != -1 && jugadorActual && !jugadorActual->getFlota()[sel].destruido) {
-             auto& barco = jugadorActual->getFlota()[sel];
-             auto bounds = barco.sprite.getGlobalBounds();
-             sf::Vector2f p = barco.sprite.getPosition();
-             float yBtn = p.y + bounds.size.y + 10.f;
-             btnAtacar.setPosition({p.x, yBtn});
-             btnMover.setPosition({p.x + 110.f, yBtn});
+        // Actualizar posición de barco seleccionado
+        if (gameState.moviendo && gameState.sel != -1 && jugadorActual) {
+            auto& barco = jugadorActual->getFlota()[gameState.sel];
+            if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), gameState.sel, WINDOW_SIZE);
         }
 
-        sf::Vector2f impactoVisual(0,0);
-        if (apuntando && sel != -1 && jugadorActual) {
-            auto bounds = jugadorActual->getFlota()[sel].sprite.getGlobalBounds();
+        // Posicionar botones de acción
+        if (gameState.sel != -1 && jugadorActual && !jugadorActual->getFlota()[gameState.sel].destruido) {
+            auto& barco = jugadorActual->getFlota()[gameState.sel];
+            auto bounds = barco.sprite.getGlobalBounds();
+            sf::Vector2f p = barco.sprite.getPosition();
+            float yBtn = p.y + bounds.size.y + 10.f;
+            btnAtacar.setPosition({p.x, yBtn});
+            btnMover.setPosition({p.x + 110.f, yBtn});
+        }
+
+        // Calcular posición de disparo
+        sf::Vector2f impactoVisual(0, 0);
+        if (gameState.apuntando && gameState.sel != -1 && jugadorActual) {
+            auto bounds = jugadorActual->getFlota()[gameState.sel].sprite.getGlobalBounds();
             sf::Vector2f centroBarco = {bounds.position.x + bounds.size.x/2.f, bounds.position.y + bounds.size.y/2.f};
             sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
             
+            sf::FloatRect* zonaObjetivo = InputHandler::obtenerZonaObjetivo(gameState, jugadorActual, zonas);
+            
             if (zonaObjetivo && zonaObjetivo->contains(mousePos)) {
-                enZonaEnemiga = true;
-                origenDisparoReal = {centroBarco.x, (float)WINDOW_SIZE.y};
+                gameState.enZonaEnemiga = true;
+                gameState.origenDisparoReal = {centroBarco.x, (float)WINDOW_SIZE.y};
             } else {
-                enZonaEnemiga = false;
-                origenDisparoReal = centroBarco;
+                gameState.enZonaEnemiga = false;
+                gameState.origenDisparoReal = centroBarco;
             }
 
-            float pot = cargandoDisparo ? potenciaActual : 50.f;
-            sf::Vector2f diff = mousePos - origenDisparoReal;
+            float pot = gameState.cargandoDisparo ? gameState.potenciaActual : 50.f;
+            sf::Vector2f diff = mousePos - gameState.origenDisparoReal;
             float ang = std::atan2(diff.y, diff.x);
-            impactoVisual = origenDisparoReal + sf::Vector2f(std::cos(ang)*pot, std::sin(ang)*pot);
+            impactoVisual = gameState.origenDisparoReal + sf::Vector2f(std::cos(ang)*pot, std::sin(ang)*pot);
         }
 
-        // --- DRAW ---
+        // === DRAW ===
         window.clear();
 
-        if (estado == MENSAJE_P1 || estado == MENSAJE_P2) {
-            window.draw(fondo); 
-            UIManager::dibujarTooltipTurno(window, font, estado);
-        }
-        else if (jugadorActual) {
-            
-            // >>> MODO RADAR <<<
-            if (modoRadar && jugadorEnemigo) {
-                // (Código radar igual al anterior...)
-                jugadorActual->memoriaRadar.clear(); 
-                for (const auto& barco : jugadorEnemigo->getFlota()) {
-                    if (!barco.destruido) {
-                        sf::FloatRect b = barco.sprite.getGlobalBounds();
-                        sf::Vector2f blipPos = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
-                        jugadorActual->memoriaRadar.push_back(blipPos);
-                    }
-                }
-                window.draw(radarBg);
-                window.draw(axisX); window.draw(axisY);
-                for (const auto& circle : radarCircles) window.draw(circle);
-                for (const auto& pos : jugadorActual->memoriaRadar) {
-                    sf::CircleShape haloOut(15.f); haloOut.setOrigin({15.f, 15.f}); haloOut.setPosition(pos);
-                    haloOut.setFillColor(sf::Color(neonRed.r, neonRed.g, neonRed.b, 50));
-                    window.draw(haloOut);
-                    sf::CircleShape core(5.f); core.setOrigin({5.f, 5.f}); core.setPosition(pos);
-                    core.setFillColor(neonRed);
-                    window.draw(core);
-                }
-                window.draw(sweepGlow);
-                window.draw(sweepLine);
-                txtInfo.setString("ESCANEANDO... GUARDANDO EN BITACORA");
-                txtInfo.setFillColor(neonGreen);
-                txtInfo.setPosition({WINDOW_SIZE.x / 2.f - 200.f, 50.f}); 
-                window.draw(txtInfo);
-                btnRadar.dibujar(window);
+        if (gameState.estado == MENSAJE_P1 || gameState.estado == MENSAJE_P2) {
+            window.draw(fondo);
+            UIManager::dibujarTooltipTurno(window, recursos.font, gameState.estado);
+        } else if (jugadorActual) {
+            // Modo Radar
+            if (gameState.modoRadar && jugadorEnemigo) {
+                RenderSystem::dibujarRadar(window, recursos.font, radarVisuals, *jugadorActual, btnRadar, WINDOW_SIZE);
             }
-            // >>> MODO NOTAS <<<
-            else if (modoNotas) {
-                // (Código notas igual al anterior...)
-                window.draw(fondoNotas); 
-                for(const auto& linea : lineasCuaderno) window.draw(linea);
-                for (const auto& barco : jugadorActual->getFlota()) {
-                    if (!barco.destruido) {
-                        sf::FloatRect b = barco.sprite.getGlobalBounds();
-                        sf::RectangleShape marco({b.size.x + 10.f, b.size.y + 10.f});
-                        marco.setOrigin({5.f, 5.f}); 
-                        marco.setPosition({b.position.x, b.position.y});
-                        marco.setFillColor(sf::Color::Transparent);
-                        marco.setOutlineThickness(2.f);
-                        marco.setOutlineColor(sf::Color(0, 100, 0, 200)); 
-                        window.draw(marco);
-                    }
-                }
-                for (const auto& pos : jugadorActual->memoriaRadar) {
-                    sf::CircleShape mancha1(20.f); mancha1.setOrigin({20.f, 20.f}); mancha1.setPosition(pos);
-                    mancha1.setFillColor(sf::Color(180, 0, 0, 30)); window.draw(mancha1);
-                    sf::CircleShape nucleo(7.f); nucleo.setOrigin({7.f, 7.f}); nucleo.setPosition(pos);
-                    nucleo.setFillColor(sf::Color(160, 0, 0, 255)); window.draw(nucleo);
-                }
-                if (jugadorEnemigo) {
-                    for (const auto& barco : jugadorEnemigo->getFlota()) {
-                        if (barco.destruido) {
-                            sf::FloatRect b = barco.sprite.getGlobalBounds();
-                            sf::Vector2f centro = {b.position.x + b.size.x/2.f, b.position.y + b.size.y/2.f};
-                            sf::RectangleShape linea1({60.f, 8.f}); linea1.setOrigin({30.f, 4.f}); linea1.setPosition(centro);
-                            linea1.setFillColor(sf::Color(139, 0, 0, 220)); linea1.setRotation(sf::degrees(45));
-                            sf::RectangleShape linea2({60.f, 8.f}); linea2.setOrigin({30.f, 4.f}); linea2.setPosition(centro);
-                            linea2.setFillColor(sf::Color(139, 0, 0, 220)); linea2.setRotation(sf::degrees(-45));
-                            window.draw(linea1); window.draw(linea2);
-                        }
-                    }
-                }
-                txtInfo.setString("BITACORA DE CAPITAN - REPORTE TACTICO");
-                txtInfo.setFillColor(sf::Color(60, 40, 20)); txtInfo.setPosition({300.f, 30.f});
-                window.draw(txtInfo);
-                btnNotas.dibujar(window);
-                sf::Rect<float> btnBounds = btnNotas.getBounds();
-                sf::Vector2f btnCenter = {btnBounds.position.x + btnBounds.size.x / 2.f, btnBounds.position.y + btnBounds.size.y / 2.f};
-                flechaPalo.setPosition({btnCenter.x + 10.f, btnCenter.y});
-                flechaPunta.setPosition({btnCenter.x - 15.f, btnCenter.y});
-                window.draw(flechaPalo); window.draw(flechaPunta);
+            // Modo Notas
+            else if (gameState.modoNotas) {
+                RenderSystem::dibujarNotas(window, recursos.font, notasVisuals, *jugadorActual, *jugadorEnemigo, btnNotas, WINDOW_SIZE);
             }
-            // >>> MODO NORMAL <<<
+            // Modo Normal
             else {
-                window.draw(fondo); 
+                window.draw(fondo);
 
-                // 1. DIBUJAR FRANJA ROJA (Si recibí ataque aéreo en el turno anterior)
+                // Dibujar franja de fuego
                 if (jugadorActual->columnaFuegoX > 0.f) {
-                    sf::RectangleShape franja({60.f, (float)WINDOW_SIZE.y});
-                    franja.setOrigin({30.f, 0.f});
-                    franja.setPosition({jugadorActual->columnaFuegoX, 0.f});
-                    franja.setFillColor(sf::Color(255, 0, 0, 100)); // Rojo semitransparente
-                    //window.draw(franja);
-
                     txtInfo.setString("! ALERTA ! ZONA BOMBARDEADA");
                     txtInfo.setFillColor(sf::Color::Red);
                     txtInfo.setPosition({jugadorActual->columnaFuegoX + 40.f, 100.f});
@@ -1269,9 +619,9 @@ int main() {
                     }
                 }
 
-                if (enZonaEnemiga && apuntando) {
+                if (gameState.enZonaEnemiga && gameState.apuntando) {
                     sf::RectangleShape overlay(sf::Vector2f((float)WINDOW_SIZE.x, (float)WINDOW_SIZE.y));
-                    overlay.setFillColor(sf::Color(255, 0, 0, 40)); 
+                    overlay.setFillColor(sf::Color(255, 0, 0, 40));
                     window.draw(overlay);
                     txtInfo.setString("! ZONA ENEMIGA ! SUELTA PARA DISPARAR");
                     txtInfo.setFillColor(sf::Color::Red);
@@ -1280,67 +630,71 @@ int main() {
                     txtInfo.setPosition({impactoVisual.x + 20.f, textoY});
                     window.draw(txtInfo);
                 } else {
-                    sf::Color cBorde = moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
-                    if (apuntando) cBorde = sf::Color::Red;
+                    sf::Color cBorde = gameState.moviendo ? sf::Color(255, 140, 0) : sf::Color(50, 150, 50);
+                    if (gameState.apuntando) cBorde = sf::Color::Red;
                     
-                    RenderManager::renderizarFlota(window, jugadorActual->getFlota(), sel, estado, moviendo, cBorde);
-                    //IndicatorManager::renderizarPistas(window, *jugadorActual, false);
-                    
-                    // ========================================================
-                    // >>> PEGAR AQUÍ EL DIBUJADO DE EXPLOSIONES <<<
-                    // ========================================================
+                    RenderManager::renderizarFlota(window, jugadorActual->getFlota(), gameState.sel, gameState.estado, gameState.moviendo, cBorde);
+
+                    // Dibujar explosiones
                     for (const auto& ex : explosionesActivas) {
                         window.draw(ex.sprite);
                     }
-                    // ========================================================
 
-                    if (apuntando) {
+                    if (gameState.apuntando) {
                         txtInfo.setString("Arrastra hacia territorio enemigo...");
                         txtInfo.setFillColor(sf::Color::Yellow);
                         txtInfo.setPosition({300.f, 20.f});
                         window.draw(txtInfo);
                     }
 
-                    // Botones
-                    if (sel != -1 && !jugadorActual->getFlota()[sel].destruido && !cargandoDisparo && !lanzandoUAV && !lanzandoUAVRefuerzo && faseAtaqueAereo == 0) {
+                    // Botones de acción
+                    if (gameState.sel != -1 && !jugadorActual->getFlota()[gameState.sel].destruido && 
+                        !gameState.cargandoDisparo && !gameState.lanzandoUAV && !gameState.lanzandoUAVRefuerzo && 
+                        gameState.faseAtaqueAereo == 0) {
                         btnAtacar.dibujar(window);
                         btnMover.dibujar(window);
                     }
                 }
 
-                if (apuntando && sel != -1) {
+                if (gameState.apuntando && gameState.sel != -1) {
                     sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-                    float pot = cargandoDisparo ? potenciaActual : 50.f;
-                    IndicatorManager::dibujarVectorApuntado(window, origenDisparoReal, mousePos, pot, font);
+                    float pot = gameState.cargandoDisparo ? gameState.potenciaActual : 50.f;
+                    IndicatorManager::dibujarVectorApuntado(window, gameState.origenDisparoReal, mousePos, pot, recursos.font);
                 }
 
-                // Render UAV y Animaciones
-                if (lanzandoUAV) { /* ... (igual al anterior) ... */ 
+                // Animación UAV
+                if (gameState.lanzandoUAV) {
                     if (uavTimer.getElapsedTime().asMilliseconds() <= 500) {
-                        txtInfo.setString("PREPARANDO DESPEGUE..."); txtInfo.setFillColor(sf::Color::White);
-                        sf::Vector2f pos = uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
-                        txtInfo.setPosition({pos.x - 80.f, pos.y - 50.f}); window.draw(txtInfo);
+                        txtInfo.setString("PREPARANDO DESPEGUE...");
+                        txtInfo.setFillColor(sf::Color::White);
+                        sf::Vector2f pos = recursos.uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
+                        txtInfo.setPosition({pos.x - 80.f, pos.y - 50.f});
+                        window.draw(txtInfo);
                     } else {
-                        txtInfo.setString("UAV EN RUTA..."); txtInfo.setFillColor(sf::Color::Cyan);
-                        sf::Vector2f pos = uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
-                        txtInfo.setPosition({pos.x + 20.f, pos.y}); window.draw(txtInfo);
+                        txtInfo.setString("UAV EN RUTA...");
+                        txtInfo.setFillColor(sf::Color::Cyan);
+                        sf::Vector2f pos = recursos.uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
+                        txtInfo.setPosition({pos.x + 20.f, pos.y});
+                        window.draw(txtInfo);
                     }
-                    if (uavLoaded) window.draw(uavSprite); else window.draw(uavShapeFallback);
+                    if (recursos.uavLoaded) window.draw(uavSprite);
+                    else window.draw(uavShapeFallback);
                 }
 
-                if (lanzandoUAVRefuerzo) {
+                if (gameState.lanzandoUAVRefuerzo) {
                     txtInfo.setString("REFUERZOS LLEGANDO...");
                     txtInfo.setFillColor(sf::Color::Green);
-                    sf::Vector2f pos = uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
+                    sf::Vector2f pos = recursos.uavLoaded ? uavSprite.getPosition() : uavShapeFallback.getPosition();
                     txtInfo.setPosition({pos.x + 20.f, pos.y});
                     window.draw(txtInfo);
-                    if (uavLoaded) window.draw(uavSprite); else window.draw(uavShapeFallback);
+                    if (recursos.uavLoaded) window.draw(uavSprite);
+                    else window.draw(uavShapeFallback);
                 }
 
-                // ANIMACION ATAQUE AEREO (Dibujar)
-                if (faseAtaqueAereo > 0 && avionLoaded) {
+                // Animación Air Strike
+                if (gameState.faseAtaqueAereo > 0 && recursos.avionLoaded) {
                     window.draw(sAvionAtaque);
-                    if (faseAtaqueAereo == 1) {
+                    if (gameState.faseAtaqueAereo == 1) {
                         txtInfo.setString("MOTORES EN MARCHA...");
                         txtInfo.setFillColor(sf::Color::Yellow);
                         txtInfo.setPosition({sAvionAtaque.getPosition().x + 20.f, sAvionAtaque.getPosition().y});
@@ -1348,115 +702,33 @@ int main() {
                     }
                 }
 
-                if (errorTimer > 0.f) {
-                    txtInfo.setString(msgError);
+                if (gameState.errorTimer > 0.f) {
+                    txtInfo.setString(gameState.msgError);
                     txtInfo.setFillColor(sf::Color::Red);
                     txtInfo.setPosition({150.f, 300.f});
                     window.draw(txtInfo);
                 }
 
-                if (!apuntando && !cargandoDisparo && !lanzandoUAV && !lanzandoUAVRefuerzo && faseAtaqueAereo == 0) {
+                if (!gameState.apuntando && !gameState.cargandoDisparo && !gameState.lanzandoUAV && 
+                    !gameState.lanzandoUAVRefuerzo && gameState.faseAtaqueAereo == 0) {
                     btnRadar.dibujar(window);
-                    btnNotas.dibujar(window); 
+                    btnNotas.dibujar(window);
                 }
             }
         }
 
-        // --- DIBUJAR MENU SUPERPUESTO ---
-        if (juegoPausado) {
-            window.draw(fondoMenu);
-            window.draw(cajaMenu);
-            window.draw(txtMenuTitulo);
-
-            // --- ACTUALIZAR VISUALES ---
-            
-            // Colores de selección (Resaltar fila activa)
-            sf::Color colSel = sf::Color(0, 255, 100); // Verde brillante
-            sf::Color colNorm = sf::Color::White;
-
-            if (opcionMenuSeleccionada == 0) {
-                lblMusica.setFillColor(colSel);
-                btnMenosMusica.setFillColor(colSel);
-                btnMasMusica.setFillColor(colSel);
-                lblEfectos.setFillColor(colNorm);
-                btnMenosEfectos.setFillColor(colNorm);
-                btnMasEfectos.setFillColor(colNorm);
-            } else {
-                lblMusica.setFillColor(colNorm);
-                btnMenosMusica.setFillColor(colNorm);
-                btnMasMusica.setFillColor(colNorm);
-                lblEfectos.setFillColor(colSel);
-                btnMenosEfectos.setFillColor(colSel);
-                btnMasEfectos.setFillColor(colSel);
-            }
-
-            // Actualizar barras y textos numéricos
-            barraMusicaFill.setSize({volMusica, 10.f}); // 100px max ancho = 100% volumen
-            valMusicaTxt.setString(std::to_string((int)volMusica) + "%");
-
-            barraEfectosFill.setSize({volEfectos, 10.f});
-            valEfectosTxt.setString(std::to_string((int)volEfectos) + "%");
-
-            // --- DIBUJAR FILA 1 (MUSICA) ---
-            window.draw(lblMusica);
-            window.draw(btnMenosMusica);
-            window.draw(barraMusicaBg);
-            window.draw(barraMusicaFill);
-            window.draw(btnMasMusica);
-            window.draw(valMusicaTxt);
-
-            // --- DIBUJAR FILA 2 (EFECTOS) ---
-            window.draw(lblEfectos);
-            window.draw(btnMenosEfectos);
-            window.draw(barraEfectosBg);
-            window.draw(barraEfectosFill);
-            window.draw(btnMasEfectos);
-            window.draw(valEfectosTxt);
-
-            window.draw(txtInstruccionesVol);
+        // Menú de pausa
+        if (gameState.juegoPausado) {
+            RenderSystem::dibujarMenuPausa(window, recursos.font, gameState, WINDOW_SIZE);
         }
 
-        // --- PANTALLA DE VICTORIA ---
-        if (idGanador != 0) {
-            window.draw(fondoMenu);  
-
-            // >>> DIBUJAR SISTEMA DE PARTICULAS ANIMADAS <<<
-            sf::RectangleShape pixel({3.f, 3.f});
-            // IMPORTANTE: Origen al centro para que rotación y escala funcionen bien
-            pixel.setOrigin({1.5f, 1.5f}); 
-
-            for (const auto& p : sistemaParticulas) {
-                pixel.setPosition(p.pos);
-                pixel.setRotation(sf::degrees(p.angulo));        // Aplicar giro
-                pixel.setScale({p.escala, p.escala}); // Aplicar tamaño dinámico
-                
-                sf::Color c = p.color;
-                c.a = static_cast<std::uint8_t>(p.vida * 255);
-                pixel.setFillColor(c);
-                
-                window.draw(pixel);
-            }
-
-            // Usamos L"" para soportar caracteres especiales
-            std::wstring strGanador = (idGanador == 1) ? L"¡JUGADOR 1 GANA!" : L"¡JUGADOR 2 GANA!";
-            txtVictoria.setString(strGanador);
-            
-            sf::FloatRect b1 = txtVictoria.getLocalBounds();
-            txtVictoria.setOrigin({b1.size.x / 2.f, b1.size.y / 2.f});
-            txtVictoria.setPosition({WINDOW_SIZE.x / 2.f, WINDOW_SIZE.y / 2.f - 50.f});
-
-            sf::Text txtSubVictoria(font);
-            txtSubVictoria.setString(L"FLOTA ENEMIGA HUNDIDA\nPresiona ESC para volver al Menu");
-
-            sf::FloatRect b2 = txtSubVictoria.getLocalBounds();
-            txtSubVictoria.setOrigin({b2.size.x / 2.f, b2.size.y / 2.f});
-            txtSubVictoria.setPosition({WINDOW_SIZE.x / 2.f, WINDOW_SIZE.y / 2.f + 50.f});
-
-            window.draw(txtVictoria);
-            window.draw(txtSubVictoria);
+        // Pantalla de victoria
+        if (gameState.idGanador != 0) {
+            RenderSystem::dibujarVictoria(window, recursos.font, gameState.idGanador, sistemaParticulas, WINDOW_SIZE);
         }
 
         window.display();
     }
+
     return 0;
 }

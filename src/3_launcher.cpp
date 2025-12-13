@@ -5,7 +5,6 @@
 
 // Función auxiliar para iniciar el juego y cerrar el launcher
 void iniciarJuego(sf::RenderWindow& window, sf::Music& musica) {
-    std::cout << "¡Iniciando juego..." << std::endl;
     musica.stop();
     window.close();
 
@@ -23,14 +22,13 @@ int main() {
     // Cargar la fuente Ring.ttf
     sf::Font fontRing;
     if (!fontRing.openFromFile("assets/fonts/Ring.ttf")) {
-        std::cerr << "Error al cargar la fuente Ring.ttf" << std::endl;
         return -1;
     }
     
     // Cargar la música de fondo
     sf::Music musica;
     if (!musica.openFromFile("assets/music/Aguas-de-Fuego.ogg")) {
-        std::cerr << "Error al cargar la música Aguas-de-Fuego.ogg" << std::endl;
+        // Error silencioso
     } else {
         musica.play();
         musica.setLooping(true); 
@@ -39,7 +37,7 @@ int main() {
     // Cargar la imagen de portada
     sf::Texture texturaPortada;
     if (!texturaPortada.loadFromFile("assets/images/portada.jpg")) {
-        std::cerr << "Error al cargar portada.jpg" << std::endl;
+        // Error silencioso
     }
     sf::Sprite portada(texturaPortada);
     portada.setPosition({0.f, 0.f});
@@ -96,8 +94,6 @@ int main() {
     instrucciones.setFillColor(sf::Color(200, 200, 200));
     instrucciones.setString("Haz clic en el boton para comenzar\nO presiona ENTER\n\nPresiona ESC para salir");
     instrucciones.setPosition({250.f, 550.f});
-    
-    std::cout << "Launcher iniciado. Reproduciendo música..." << std::endl;
     
     // Loop principal
     while (window.isOpen()) {

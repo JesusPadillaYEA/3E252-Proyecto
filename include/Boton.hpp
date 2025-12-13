@@ -37,7 +37,7 @@ public:
         shape.setFillColor(colorOriginal);
     }
 
-    bool esClickeado(sf::Vector2f mousePos) {
+    bool esClickeado(sf::Vector2f mousePos) const {
         return shape.getGlobalBounds().contains(mousePos);
     }
     
@@ -50,7 +50,7 @@ public:
         return shape.getGlobalBounds();
     }
 
-    void dibujar(sf::RenderWindow& window) {
+    void dibujar(sf::RenderWindow& window) const {
         window.draw(shape);
         window.draw(label);
     }

@@ -6,6 +6,66 @@
 
 namespace GeneradorFlotas {
 
+    // Función auxiliar para encontrar una posición válida sin colisiones
+    inline sf::Vector2f encontrarPosicionValida(const std::vector<BarcoEntity>& flota, 
+                                                 const sf::Texture& textura,
+                                                 const sf::Vector2f& escala,
+                                                 float mapWidth, float mapHeight,
+                                                 int maxIntentosId) {
+        int intentos = 0;
+        const int MAX_INTENTOS = 50;
+        
+        while (intentos < MAX_INTENTOS) {
+            // Generar posición aleatoria en toda la pantalla
+            float x = static_cast<float>(std::rand() % (int)mapWidth);
+            float y = static_cast<float>(std::rand() % (int)mapHeight);
+            
+            // Crear sprite temporal para verificar colisión y límites
+            sf::Sprite tempSprite(textura);
+            tempSprite.setScale(escala);
+            tempSprite.setPosition({x, y});
+            
+            // Obtener bounds del nuevo sprite
+            sf::FloatRect newBounds = tempSprite.getGlobalBounds();
+            
+            // Verificar si sale del mapa
+            if (newBounds.position.x < 0.f || 
+                newBounds.position.y < 0.f ||
+                newBounds.position.x + newBounds.size.x > mapWidth ||
+                newBounds.position.y + newBounds.size.y > mapHeight) {
+                intentos++;
+                continue;
+            }
+            
+            // Verificar si colisiona con algún barco existente
+            bool colisiona = false;
+            for (const auto& barco : flota) {
+                sf::FloatRect barcoBounds = barco.sprite.getGlobalBounds();
+                
+                // Expandir el área de colisión un poco para dejar espacio
+                barcoBounds.position.x -= 20.f;
+                barcoBounds.position.y -= 20.f;
+                barcoBounds.size.x += 40.f;
+                barcoBounds.size.y += 40.f;
+                
+                if (newBounds.findIntersection(barcoBounds)) {
+                    colisiona = true;
+                    break;
+                }
+            }
+            
+            // Si no colisiona y está dentro del mapa, retornar la posición
+            if (!colisiona) {
+                return {x, y};
+            }
+            
+            intentos++;
+        }
+        
+        // Si no encontramos posición después de MAX_INTENTOS, retornar posición por defecto (centro)
+        return {mapWidth / 2.f, mapHeight / 2.f};
+    }
+
     inline void inicializarFlota(Jugador& jugador, 
                                  const sf::Texture& tDestructor, 
                                  const sf::Texture& tPortaviones,
@@ -20,76 +80,72 @@ namespace GeneradorFlotas {
         sf::Vector2f sSub  = {0.4f, 0.4f};
 
         if (jugador.id == 1) {
-            // --- JUGADOR 1 (Zona: 0 a 500) ---
-            // Distribuimos entre X=50 y X=400 para usar el centro.
+            // --- JUGADOR 1 ---
+            // Generar en toda la pantalla (0 a 1000 en X, 0 a 700 en Y)
             
-            // 1. Portaviones (Centro-Atrás)
+            // 1. Portaviones
             flota.emplace_back(tPortaviones, "Portaviones P1");
             flota.back().sprite.setScale(sPort);
-            flota.back().sprite.setPosition({100.f, 250.f}); 
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tPortaviones, sPort, 1000.f, 700.f, 0));
 
-            // 2. Submarinos (Flancos avanzados)
-            // Arriba-Derecha (dentro de su zona)
+            // 2. Submarino Alpha
             flota.emplace_back(tSubmarino, "Submarino Alpha P1");
             flota.back().sprite.setScale(sSub);
-            flota.back().sprite.setPosition({350.f, 80.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tSubmarino, sSub, 1000.f, 700.f, 1));
 
-            // Abajo-Derecha (dentro de su zona)
+            // 3. Submarino Beta
             flota.emplace_back(tSubmarino, "Submarino Beta P1");
             flota.back().sprite.setScale(sSub);
-            flota.back().sprite.setPosition({350.f, 450.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tSubmarino, sSub, 1000.f, 700.f, 2));
 
-            // 3. Destructores (Dispersos para cubrir huecos)
-            // Medio-Arriba
+            // 4. Destructor A
             flota.emplace_back(tDestructor, "Destructor A P1");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({220.f, 150.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 3));
 
-            // Medio-Abajo
+            // 5. Destructor B
             flota.emplace_back(tDestructor, "Destructor B P1");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({200.f, 450.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 4));
 
-            // Frente-Centro (Vanguardia)
+            // 6. Destructor C
             flota.emplace_back(tDestructor, "Destructor C P1");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({420.f, 320.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 5));
         } 
         else {
-            // --- JUGADOR 2 (Zona: 500 a 1000) ---
-            // Distribuimos entre X=550 y X=850 (Dejando espacio a la derecha para botones)
+            // --- JUGADOR 2 ---
+            // Generar en toda la pantalla (0 a 1000 en X, 0 a 700 en Y)
             
-            // 1. Portaviones (Centro-Atrás, lado derecho)
+            // 1. Portaviones
             flota.emplace_back(tPortaviones, "Portaviones P2");
             flota.back().sprite.setScale(sPort);
-            flota.back().sprite.setPosition({820.f, 280.f}); 
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tPortaviones, sPort, 1000.f, 700.f, 0));
 
-            // 2. Submarinos (Flancos avanzados hacia el centro del mapa)
-            // Arriba-Izquierda (cerca de la frontera con P1)
+            // 2. Submarino Alpha
             flota.emplace_back(tSubmarino, "Submarino Alpha P2");
             flota.back().sprite.setScale(sSub);
-            flota.back().sprite.setPosition({550.f, 100.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tSubmarino, sSub, 1000.f, 700.f, 1));
 
-            // Abajo-Izquierda
+            // 3. Submarino Beta
             flota.emplace_back(tSubmarino, "Submarino Beta P2");
             flota.back().sprite.setScale(sSub);
-            flota.back().sprite.setPosition({550.f, 450.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tSubmarino, sSub, 1000.f, 700.f, 2));
 
-            // 3. Destructores (Defensa interna)
-            // Medio-Arriba
+            // 4. Destructor A
             flota.emplace_back(tDestructor, "Destructor A P2");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({700.f, 150.f}); 
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 3));
 
-            // Medio-Abajo
+            // 5. Destructor B
             flota.emplace_back(tDestructor, "Destructor B P2");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({720.f, 480.f}); 
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 4));
 
-            // Centro (Protegiendo al portaviones)
+            // 6. Destructor C
             flota.emplace_back(tDestructor, "Destructor C P2");
             flota.back().sprite.setScale(sDest);
-            flota.back().sprite.setPosition({650.f, 350.f});
+            flota.back().sprite.setPosition(encontrarPosicionValida(flota, tDestructor, sDest, 1000.f, 700.f, 5));
 
             // Color distintivo para P2
             for (auto& barco : flota) {
