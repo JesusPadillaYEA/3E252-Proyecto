@@ -23,19 +23,24 @@ SRC_DIR := src
 BIN_DIR := bin
 INCLUDE_DIR := include
 ASSETS_DIR := assets
+SFML_PATH := sfml
 
 # Compilador y flags
 CXX := g++
-CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR)
+CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR) -I$(SFML_PATH)/include
 
 # Librerías SFML
-SFML_LIBS := -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
+SFML_LIBS := -L$(SFML_PATH)/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
 
 # Obtener todos los archivos .cpp en el directorio de origen
 CPP_FILES := $(wildcard $(SRC_DIR)/*.cpp)
 
 # Generar los nombres de los archivos .exe en el directorio de destino
 EXE_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(BIN_DIR)/%.exe,$(CPP_FILES))
+
+# Archivos específicos del proyecto
+MAIN_EXE := $(BIN_DIR)/main.exe
+LAUNCHER_EXE := $(BIN_DIR)/JuegoProyecto.exe
 
 # Regla por defecto
 all: $(EXE_FILES)
@@ -81,6 +86,32 @@ run4: $(BIN_DIR)/4_interaccion.exe
 	@echo "Ejecutando demostración de interacción..."
 	cd "$(CURDIR)" && ./$(BIN_DIR)/4_interaccion.exe
 
+# Regla para compilar main.exe
+main: $(MAIN_EXE)
+	@echo "✓ main.exe compilado"
+
+# Regla para compilar JuegoProyecto.exe (launcher)
+launcher-build: $(LAUNCHER_EXE)
+	@echo "✓ JuegoProyecto.exe compilado"
+
+# Regla específica para compilar main.exe desde main.cpp
+$(MAIN_EXE): $(SRC_DIR)/main.cpp
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(SFML_LIBS)
+	@echo "✓ Compilado: $@"
+
+# Regla específica para compilar launcher desde 3_launcher.cpp
+$(LAUNCHER_EXE): $(SRC_DIR)/3_launcher.cpp
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(SFML_LIBS)
+	@echo "✓ Compilado: $@"
+
+# Regla para compilar AMBOS (main + launcher) y ejecutar launcher
+play: $(MAIN_EXE) $(LAUNCHER_EXE)
+	@echo "✓ Compilación completada (main.exe + JuegoProyecto.exe)"
+	@echo "Ejecutando Launcher..."
+	cd "$(CURDIR)" && ./$(LAUNCHER_EXE)
+
 # Regla para ejecutar el launcher
 launcher: $(BIN_DIR)/3_launcher.exe
 	@echo "Ejecutando Launcher..."
@@ -103,6 +134,9 @@ list:
 help:
 	@echo "Comandos disponibles:"
 	@echo "  make all          - Compila todos los archivos .cpp"
+	@echo "  make main         - Compila main.exe"
+	@echo "  make launcher-build - Compila JuegoProyecto.exe (launcher)"
+	@echo "  make play         - Compila main.exe + JuegoProyecto.exe y ejecuta launcher"
 	@echo "  make run0         - Compila y ejecuta 0_Ventana.exe"
 	@echo "  make run1         - Compila y ejecuta 1_mapa.exe"
 	@echo "  make run2         - Compila y ejecuta 2_visualizacion_unidades.exe"
@@ -113,5 +147,5 @@ help:
 	@echo "  make list         - Muestra los archivos fuente y ejecutables"
 	@echo "  make help         - Muestra esta ayuda"
 
-.PHONY: all clean list help
+.PHONY: all clean list help main launcher-build play
 .PHONY: run% runmap runwindow

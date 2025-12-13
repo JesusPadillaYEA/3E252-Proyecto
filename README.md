@@ -1,6 +1,25 @@
 # 3E252-Proyecto
 proyecto de programación avanzada (24310401 y 24310402)
 
+### 🚀 Compilación y Ejecución
+
+#### Opción 1: Script Automático (Recomendado)
+Ejecuta el script `play.bat` para compilar ambos ejecutables y lanzar el juego:
+```bash
+.\play.bat
+```
+Este comando compila `main.exe` y `JuegoProyecto.exe` (launcher), y automáticamente abre el launcher.
+
+#### Opción 2: Desde la Consola
+Compila manualmente usando:
+```bash
+powershell -ExecutionPolicy Bypass -File .\compile.ps1
+```
+Luego ejecuta el launcher:
+```bash
+.\bin\JuegoProyecto.exe
+```
+
 ### 🎯 Objetivo del Juego
 
 Juego de estrategia donde dos jugadores deben aniquilar la flota del otro, varios tipos de barcos repartidos en el océano donde un disparo mal planeado podría definir todo la partida
