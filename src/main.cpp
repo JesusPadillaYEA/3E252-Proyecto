@@ -154,36 +154,75 @@ int main() {
     int faseDisparoNormal = 0; // 0 = Inactivo, 1 = Sonando
     sf::Sound* sonidoDisparoActual = nullptr; // Puntero para saber cuál esperar
 
+   // >>> NUEVO: SONIDO DESTRUCCION <<<
     sf::SoundBuffer bufferDestruccion;
     if (!bufferDestruccion.loadFromFile("assets/sounds/s_done.ogg")) {
-        std::cerr << "Error: No se pudo cargar assets/sounds/s_done.ogg" << std::endl;
+        std::cerr << "Error cargando s_done.ogg" << std::endl;
     }
     sf::Sound sDestruccion(bufferDestruccion);
     sDestruccion.setVolume(volEfectos);
 
-    // >>> NUEVO: TEXTURAS DE ANIMACION DE EXPLOSION <<<
+    // >>> NUEVO: ANIMACION EXPLOSION <<<
     std::vector<sf::Texture> animExplosionTex(6);
     bool animOk = true;
     for (int i = 0; i < 6; ++i) {
         if (!animExplosionTex[i].loadFromFile("assets/animations/explosion/" + std::to_string(i) + ".png")) {
-            std::cerr << "Error cargando frame de explosion " << i << std::endl;
+            std::cerr << "Error cargando frame explosion " << i << std::endl;
             animOk = false;
         }
     }
 
-    // Estructura para gestionar animaciones activas
+    // Estructura para manejar las explosiones visuales
     struct ExplosionVisual {
         sf::Sprite sprite;
         float frameTime; 
         int currentFrame;
 
-        // --- AGREGAR ESTE CONSTRUCTOR ---
+        // Constructor necesario para SFML 3 (Sprite no tiene constructor vacío)
         ExplosionVisual(const sf::Texture& texture) : sprite(texture) {
             frameTime = 0.f;
             currentFrame = 0;
+            
+            // Ajustar origen al centro y escala
+            sf::FloatRect bounds = sprite.getLocalBounds();
+            sprite.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
+            sprite.setScale({1.0f, 1.0f}); // Ajusta este valor si es muy grande/pequeña
         }
     };
+    
     std::vector<ExplosionVisual> explosionesActivas;
+
+    // >>> NUEVO: CARGAR ANIMACION DE FUEGO <<<
+    std::vector<sf::Texture> animFuegoTex(7); // Son 7 frames (0-6)
+    for (int i = 0; i < 7; ++i) {
+        if (!animFuegoTex[i].loadFromFile("assets/animations/fuego/" + std::to_string(i) + ".png")) {
+            std::cerr << "Error cargando frame fuego " << i << std::endl;
+        }
+    }
+
+    // Estructura para el fuego (persistente y cíclico)
+    struct FuegoVisual {
+        sf::Sprite sprite;
+        float frameTime;
+        int currentFrame;
+
+        FuegoVisual(const sf::Texture& texture, sf::Vector2f pos) : sprite(texture) {
+            sprite.setPosition(pos);
+            sf::FloatRect bounds = sprite.getLocalBounds();
+            sprite.setOrigin({bounds.size.x / 2.f, bounds.size.y / 2.f});
+            
+            // DESINCRONIZACIÓN:
+            // Iniciamos en un frame aleatorio para que no se muevan todos igual
+            currentFrame = std::rand() % 7; 
+            frameTime = 0.f;
+            
+            // Variación aleatoria de tamaño para más naturalidad
+            float escala = 1.0f + static_cast<float>(std::rand() % 5) / 10.0f; // 1.0 a 1.5
+            sprite.setScale({escala, escala});
+        }
+    };
+    
+    std::vector<FuegoVisual> fuegosActivos;
 
     // --- UI DEL MENU ---
     // Fondo oscuro
@@ -496,6 +535,58 @@ int main() {
                     EstadoJuego siguienteEstado = (estado == MENSAJE_P1) ? TURNO_P1 : TURNO_P2;
                     Jugador* siguienteJugador = (siguienteEstado == TURNO_P1) ? &p1 : &p2;
 
+                    // 1. Limpiar fuegos del turno anterior
+                    fuegosActivos.clear();
+
+                    // 2. Si el jugador que entra tiene una zona bombardeada, generar fuego
+                    if (siguienteJugador->columnaFuegoX > 0.f) {
+                        
+                        // AUMENTAMOS LA CANTIDAD Y DISTRIBUIMOS POR TRAMOS
+                        int cantidadFuego = 40; // Más llamas para que se vea denso
+                        float alturaTramo = (float)WINDOW_SIZE.y / cantidadFuego; // Altura de cada "escalón"
+                        
+                        for (int i = 0; i < cantidadFuego; ++i) {
+                            // En lugar de una Y totalmente aleatoria, vamos bajando paso a paso
+                            float yBase = i * alturaTramo;
+                            // Aleatoriedad solo dentro de su tramo para que no parezca una cuadrícula perfecta
+                            float variacionY = static_cast<float>(std::rand() % (int)alturaTramo);
+                            
+                            float yFinal = yBase + variacionY;
+                            
+                            // Variación horizontal
+                            float offsetX = (std::rand() % 50) - 25.f; 
+                            sf::Vector2f pos = { siguienteJugador->columnaFuegoX + offsetX, yFinal };
+
+                            // Crear y guardar
+                            FuegoVisual fuego(animFuegoTex[0], pos); 
+                            
+                            // Asignar textura del frame inicial (importante para que no empiecen todas igual)
+                            fuego.sprite.setTexture(animFuegoTex[fuego.currentFrame]);
+                            
+                            fuegosActivos.push_back(fuego);
+                        }
+                    }
+
+                    if (siguienteJugador && !siguienteJugador->explosionesPendientes.empty()) {
+            
+                        sDestruccion.play();
+
+                        // >>> CORRECCIÓN AQUÍ: Usar 'siguienteJugador' <<<
+                        for (const auto& pos : siguienteJugador->explosionesPendientes) { //
+                            
+                            ExplosionVisual ex(animExplosionTex[0]);
+                            
+                            sf::FloatRect bounds = ex.sprite.getLocalBounds();
+                            ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
+                            ex.sprite.setPosition(pos);
+                            ex.sprite.setScale({1.0f, 1.0f}); 
+                            
+                            explosionesActivas.push_back(ex);
+                        }
+
+                        // Limpiar la lista del jugador correcto
+                        siguienteJugador->explosionesPendientes.clear();
+                    }
                     // Reducir cooldowns
                     if (siguienteJugador->cooldownRadar > 0) siguienteJugador->cooldownRadar--;
                     if (siguienteJugador->cooldownAtaqueAereo > 0) siguienteJugador->cooldownAtaqueAereo--;
@@ -706,39 +797,28 @@ int main() {
                         impacto.y = origenDisparoReal.y + std::sin(angulo) * potenciaActual;
 
                     if (jugadorEnemigo) {
-                            // Vector para capturar coordenadas de barcos destruidos
                             std::vector<sf::Vector2f> bajas;
-
-                            // Pasamos 'bajas' a la función
+                            // Ahora esto funcionará porque actualizamos el header
                             bool acerto = AttackManager::procesarDisparo(impacto, origenDisparoReal, *jugadorEnemigo, bajas);
                             
-                            // GESTION DE BAJAS (ANIMACION Y SONIDO)
+                            // >>> CAMBIO: SI HAY BAJAS, GUARDARLAS EN EL ENEMIGO (NO MOSTRAR AUN) <<<
                             if (!bajas.empty()) {
-                                    sDestruccion.play(); 
-                                    for (const auto& pos : bajas) {
-                                        // 1. CREAR CON TEXTURA DIRECTAMENTE
-                                        ExplosionVisual ex(animExplosionTex[0]);
-                                        
-                                        // 2. CONFIGURAR
-                                        sf::FloatRect bounds = ex.sprite.getLocalBounds();
-                                        ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
-                                        ex.sprite.setPosition(pos);
-                                        ex.sprite.setScale({2.0f, 2.0f}); 
-                                        
-                                        // 3. GUARDAR
-                                        explosionesActivas.push_back(ex);
-                                    }
+                                for(const auto& pos : bajas) {
+                                    // Las guardamos en el buzon del enemigo
+                                    jugadorEnemigo->explosionesPendientes.push_back(pos);
                                 }
+                            }
                             
+                            // Solo reproducimos sonido de impacto o fallo (no de destrucción)
                             if (acerto) {
-                                if (bajas.empty()) sShotDone.play(); // Solo suena impacto si no hubo destrucción total (para no solapar)
-                                sonidoDisparoActual = bajas.empty() ? &sShotDone : &sDestruccion;
+                                sShotDone.play();
+                                sonidoDisparoActual = &sShotDone;
                             } else {
                                 sShotFail.play();
                                 sonidoDisparoActual = &sShotFail;
                             }
                             
-                            faseDisparoNormal = 1; 
+                            faseDisparoNormal = 1;
                         }
                         IndicatorManager::actualizarTurnos(*jugadorActual);
                         apuntando = false; sel = -1;
@@ -827,31 +907,21 @@ int main() {
                 bool sonidoTerminado = (sAirStrike.getStatus() == sf::Sound::Status::Stopped);
 
                 if (avionFuera && sonidoTerminado) {
-                    faseAtaqueAereo = 0;
+                    
                     if (jugadorEnemigo) {
                         std::vector<sf::Vector2f> bajasAereas;
-                        
-                        // Pasamos 'bajasAereas' a la función
                         AttackManager::procesarAtaqueAereo(colObjetivoX, *jugadorEnemigo, bajasAereas);
 
-                        // Si hubo bajas por airstrike
+                        // >>> CAMBIO: GUARDAR BAJAS EN EL ENEMIGO <<<
                         if (!bajasAereas.empty()) {
-                            sDestruccion.play();
-                            for (const auto& pos : bajasAereas) {
-                                // 1. CREAR CON TEXTURA DIRECTAMENTE
-                                ExplosionVisual ex(animExplosionTex[0]);
-
-                                // 2. CONFIGURAR
-                                sf::FloatRect bounds = ex.sprite.getLocalBounds();
-                                ex.sprite.setOrigin({bounds.size.x/2.f, bounds.size.y/2.f});
-                                ex.sprite.setPosition(pos);
-                                ex.sprite.setScale({2.0f, 2.0f});
-                                
-                                // 3. GUARDAR
-                                explosionesActivas.push_back(ex);
+                            for(const auto& pos : bajasAereas) {
+                                jugadorEnemigo->explosionesPendientes.push_back(pos);
                             }
                         }
                     }
+                    
+                    // Finalizamos turno inmediatamente (la víctima verá el daño al empezar)
+                    faseAtaqueAereo = 0;
                     IndicatorManager::actualizarTurnos(*jugadorActual);
                     estado = (estado == TURNO_P1) ? MENSAJE_P2 : MENSAJE_P1;
                 }
@@ -889,17 +959,14 @@ int main() {
             for (size_t i = 0; i < explosionesActivas.size(); ) {
                 explosionesActivas[i].frameTime += deltaTime;
                 
-                // Cambiar frame cada 0.1 segundos
-                if (explosionesActivas[i].frameTime > 0.1f) {
+                if (explosionesActivas[i].frameTime > 0.1f) { // Velocidad animación
                     explosionesActivas[i].frameTime = 0.f;
                     explosionesActivas[i].currentFrame++;
                     
                     if (explosionesActivas[i].currentFrame >= 6) {
-                        // Animación terminada, eliminar
                         explosionesActivas.erase(explosionesActivas.begin() + i);
-                        continue; 
+                        continue;
                     } else {
-                        // Actualizar textura
                         explosionesActivas[i].sprite.setTexture(animExplosionTex[explosionesActivas[i].currentFrame]);
                     }
                 }
@@ -907,6 +974,22 @@ int main() {
             }
         }
 
+        // >>> NUEVO: UPDATE DE FUEGO <<<
+        for (auto& fuego : fuegosActivos) {
+            fuego.frameTime += deltaTime;
+            
+            if (fuego.frameTime > 0.1f) { // Velocidad de la animación
+                fuego.frameTime = 0.f;
+                fuego.currentFrame++;
+                
+                // BUCLE: Si pasa del último frame, volver al 0
+                if (fuego.currentFrame >= 7) {
+                    fuego.currentFrame = 0;
+                }
+                
+                fuego.sprite.setTexture(animFuegoTex[fuego.currentFrame]);
+            }
+        }
         if (moviendo && sel != -1 && jugadorActual) {
             auto& barco = jugadorActual->getFlota()[sel];
             if (!barco.destruido) MovementManager::procesarInput(jugadorActual->getFlota(), sel, WINDOW_SIZE);
@@ -1036,12 +1119,15 @@ int main() {
                     franja.setOrigin({30.f, 0.f});
                     franja.setPosition({jugadorActual->columnaFuegoX, 0.f});
                     franja.setFillColor(sf::Color(255, 0, 0, 100)); // Rojo semitransparente
-                    window.draw(franja);
+                    //window.draw(franja);
 
                     txtInfo.setString("! ALERTA ! ZONA BOMBARDEADA");
                     txtInfo.setFillColor(sf::Color::Red);
                     txtInfo.setPosition({jugadorActual->columnaFuegoX + 40.f, 100.f});
                     window.draw(txtInfo);
+                    for (const auto& fuego : fuegosActivos) {
+                        window.draw(fuego.sprite);
+                    }
                 }
 
                 if (enZonaEnemiga && apuntando) {
