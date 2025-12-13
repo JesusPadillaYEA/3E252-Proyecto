@@ -17,32 +17,40 @@ Lista los controles:
 
 ### ⚙️ Mecánicas y Reglas
 
-#### ⚔️ Combate Básico
-* **Turnos Alternados**: El juego se desarrolla por turnos. Cada jugador puede realizar una acción de movimiento o ataque por turno.
-* **Ataque Normal**: Disponible para todas las unidades. Selecciona un barco, presiona "ATACAR" y arrastra el mouse desde el barco para definir potencia y ángulo. El proyectil tiene un radio de explosión al impactar.
-* **Movimiento**: Las unidades pueden moverse distancias cortas para esquivar ataques futuros, consumiendo el turno.
+#### ⚔️ Sistema de Turnos y Acciones
+El juego se rige por una regla estricta de acciones: **Solo atacar finaliza tu turno**.
+
+* **🏃 Movimiento Táctico (Acción Libre)**: 
+    * Mover tus barcos **NO consume el turno**. 
+    * Puedes reacomodar tu flota libremente para esquivar o mejorar tu ángulo antes de decidir atacar.
+    
+* **💥 Ataque (Finaliza el Turno)**: 
+    * Cualquier forma de agresión (Disparo Normal o Ataque Aéreo) termina inmediatamente tu turno.
+    * **Ataque Normal**: Disponible para todas las unidades. Arrastra el mouse para definir potencia y ángulo.
 
 #### 🚢 Habilidades Especiales (Clase Portaviones)
-El **Portaviones** es la unidad táctica central. Mientras esté operativo, permite el uso de soporte avanzado:
+El **Portaviones** es la unidad vital para el soporte táctico. Si es destruido, pierdes acceso inmediato a estas herramientas.
 
-1.  **🛩️ Ataque Aéreo (Air Strike)**
-    * **Efecto**: Lanza un caza que bombardea una columna vertical completa en el campo enemigo. Ideal para golpear sin apuntar con precisión.
+1.  **📡 Radar / UAV (Acción Libre)**
+    * **Efecto**: Escanea el campo enemigo y revela posiciones en la Bitácora.
+    * **Costo**: **NO consume el turno**. Puedes usar el radar, ver dónde están los enemigos y luego disparar en el mismo turno.
     * **Requisito**: Portaviones activo.
-    * **Enfriamiento (Cooldown)**: **5 turnos** de recarga.
-    * **Alerta**: Deja una zona de fuego residual visible durante el turno del oponente.
+    * **Enfriamiento**: **2 turnos**.
 
-2.  **📡 Radar (UAV)**
-    * **Efecto**: Despliega un dron de reconocimiento que revela momentáneamente la posición de la flota enemiga y guarda "ecos" en la Bitácora.
-    * **Requisito**: Portaviones activo. Si el portaviones es destruido, se perderá la conexión y se requerirá un turno extra para solicitar refuerzos aéreos externos.
-    * **Enfriamiento (Cooldown)**: **2 turnos** de recarga.
+2.  **🛩️ Ataque Aéreo / Air Strike (Finaliza el Turno)**
+    * **Efecto**: Bombardeo vertical masivo en una zona enemiga.
+    * **Costo**: Al ser un ataque, **SÍ consume el turno**.
+    * **Requisito**: Portaviones activo.
+    * **Enfriamiento**: **5 turnos**.
+    * **Alerta**: Deja rastro visual (fuego) en el turno del oponente.
 
-#### 📝 Sistema de Notas y Bitácora
-* Accede mediante el botón **"NOTAS"**.
-* Despliega un mapa táctico estilo "papel" que muestra las últimas posiciones confirmadas por el Radar.
-* **Uso Libre**: Consultar las notas no consume el turno, permitiendo planear la estrategia antes de actuar.
+#### 📝 Bitácora y Notas (Acción Libre)
+* Accede con el botón **"NOTAS"**.
+* Muestra un registro visual ("ecos" del radar y posiciones pasadas).
+* **Uso**: Abrir y cerrar las notas **NO consume el turno**. Úsalo para planear tu estrategia con calma.
 
 ### 🏆 Condiciones de Victoria
-* **Aniquilación Total**: La partida termina inmediatamente cuando todos los barcos de un jugador han sido destruidos.
+* **Aniquilación Total**: Gana el jugador que logre hundir el 100% de la flota enemiga.
 
 ### 👥 Equipo
 
@@ -53,4 +61,9 @@ El **Portaviones** es la unidad táctica central. Mientras esté operativo, perm
 
 - Motor/Framework: SFML.
 - Lenguaje: C++/CMake.
-- Librerías adicionales: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll, sfml-audio-3.dll, sfml-...
+- Librerías adicionales: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll, sfml-audio-3.dll, sfml-graphics-3.dll, sfml-system-3.dll, sfml-window-3.dll
+
+### 📜 Créditos
+
+- Inspirado en el juego de mesa "Battleship" (Hasbro Gaming)
+- Tipografía: https://www.dafont.com/es/impacted.font
